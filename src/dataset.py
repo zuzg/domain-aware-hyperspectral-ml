@@ -8,11 +8,11 @@ from torchvision import transforms
 
 
 class HyperviewDataset(Dataset):
-    def __init__(self, directory: str, size: int, max_val: int) -> None:
+    def __init__(self, directory: str, size: int, max_val: int, mean: float, std: float) -> None:
         super().__init__()
         self.max_val = max_val
         self.images = self.load_images(directory)
-        self.transform = transforms.Compose([transforms.CenterCrop(size), transforms.Normalize(0, max_val)])
+        self.transform = transforms.Compose([transforms.CenterCrop(size), transforms.Normalize(mean, std)])
 
     def __len__(self) -> int:
         return len(self.images)
