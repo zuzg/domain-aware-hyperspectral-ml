@@ -2,10 +2,29 @@ import numpy as np
 import torch
 import torch.nn as nn
 import wandb
+from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.models.renderers.base_renderer import BaseRenderer
+
+
+def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
+    n, k, _, h, w = tensor.shape
+    mu = tensor[:, :, 0, :, :]
+    result = torch.zeros((n, h, w), device=device)
+
+    # iterate over all possible pairs (i, j) with i != j
+    for i in range(k):
+        for j in range(k):
+            if i != j:
+                diff = torch.abs(mu[:, i, :, :] - mu[:, j, :, :])
+                exp_diff = torch.exp(-diff)
+                result += exp_diff
+
+    # average over all pixels and batch size
+    result = result.sum() / (n * h * w)
+    return result
 
 
 def train(
@@ -30,6 +49,7 @@ def train(
                 y_pred = model(input)
                 y_pred_r = renderer(y_pred)
                 loss = criterion(y_pred_r, input)
+                loss += calculate_penalization(y_pred, device)
                 loss.backward()
                 optimizer.step()
                 tepoch.set_postfix(loss=loss.item())

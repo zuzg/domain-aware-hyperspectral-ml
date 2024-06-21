@@ -1,5 +1,6 @@
 import numpy as np
 import wandb
+import torch
 from torch.utils.data import DataLoader, random_split
 
 from src.config import ExperimentConfig
@@ -15,11 +16,12 @@ class Experiment:
         self.cfg = cfg
         wandb.init(
             project="hyperview",
-            name=f"gaussian_k={self.cfg.k}",
+            name=f"gaussian_penalization_k={self.cfg.k}",
             config=vars(self.cfg)
         )
 
     def run(self) -> None:
+        torch.manual_seed(42)
         with open(MAX_PATH, "rb") as f:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
