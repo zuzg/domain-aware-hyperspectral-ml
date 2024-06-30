@@ -33,9 +33,10 @@ class Experiment:
         testloader = DataLoader(test_set, batch_size=self.cfg.batch_size)
 
         renderer = RENDERERS_DICT[self.cfg.renderer]
+        renderer_model = renderer.model(self.cfg.device, CHANNELS)
         modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, renderer.num_params).to(self.cfg.device)
-        model = train(modeller, renderer.model(self.cfg.device), trainloader, valloader, self.cfg)
+        model = train(modeller, renderer_model, trainloader, valloader, self.cfg)
 
         if self.cfg.wandb:
-            evaluate(model, renderer.model(self.cfg.device), testloader, self.cfg)
+            evaluate(model, renderer_model, testloader, self.cfg)
             wandb.finish()

@@ -24,5 +24,5 @@ RENDERERS_DICT: dict[str, BaseRenderer] = {
     "GaussianRenderer": RendererConfig(GaussianRenderer, 3),
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
-    "SplineRenderer": RendererConfig(SplineRenderer, 3),
+    "SplineRenderer": RendererConfig(SplineRenderer, 1),
 }
