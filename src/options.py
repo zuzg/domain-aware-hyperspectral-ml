@@ -8,9 +8,10 @@ def parse_args() -> ExperimentConfig:
 
     parser.add_argument("--img_size", type=int, default=10)
     parser.add_argument("--max_val", type=int, default=6000)
-    parser.add_argument("--renderer", type=str, default="PolynomialDegreeRenderer")
+    parser.add_argument("--bias_renderer", type=str, default="SplineRenderer")
+    parser.add_argument("--variance_renderer", type=str, default="GaussianRenderer")
     parser.add_argument("--k", type=int, default=5)
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--device", type=str, default="cuda")

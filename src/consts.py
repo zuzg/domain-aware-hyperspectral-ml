@@ -7,6 +7,7 @@ from src.models.renderers.polynomial_degree_renderer import PolynomialDegreeRend
 from src.models.renderers.polynomial_renderer import PolynomialRenderer
 from src.models.renderers.spline_renderer import SplineRenderer
 
+
 # paths
 DATA_PATH: Path = Path("data/hyperview")
 TRAIN_PATH: Path = DATA_PATH / "train_data/train_data"
@@ -25,4 +26,5 @@ RENDERERS_DICT: dict[str, BaseRenderer] = {
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
     "SplineRenderer": RendererConfig(SplineRenderer, 1),
+    "None": RendererConfig(None, 0),
 }

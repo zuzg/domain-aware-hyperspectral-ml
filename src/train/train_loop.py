@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
-from src.models.renderers.base_renderer import BaseRenderer
+from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 
 
 def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
@@ -28,17 +28,48 @@ def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
     return result
 
 
+def pretrain(
+    bias_model: BiasModel,
+    trainloader: DataLoader,
+    cfg: ExperimentConfig,
+) -> nn.Module:
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(bias_model.parameters(), lr=cfg.lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+    for epoch in range(cfg.epochs):
+        step_losses = []
+        with tqdm(trainloader, unit="batch") as tepoch:
+            for input in tepoch:
+                tepoch.set_description(f"Pretraining epoch {epoch}")
+                optimizer.zero_grad()
+                input = input.to(cfg.device)
+                y_pred = bias_model(0)
+                loss = criterion(y_pred, input)
+                loss.backward()
+                optimizer.step()
+                tepoch.set_postfix(loss=loss.item())
+                step_losses.append(loss.cpu().detach().numpy())
+        scheduler.step()
+        if cfg.wandb:
+            wandb.log({"metrics/pretrain/MSE": np.mean(step_losses)})
+        scheduler.step()
+    return bias_model
+
+
 def train(
-    model: nn.Module,
-    renderer: BaseRenderer,
+    variance_model: VarianceModel,
+    bias_model: BiasModel | None,
     trainloader: DataLoader,
     valloader: DataLoader,
     cfg: ExperimentConfig,
-) -> tuple[nn.Module, list[float], list[float]]:
+) -> tuple[nn.Module]:
+    model = BiasVarianceModel(bias_model, variance_model)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     for epoch in range(cfg.epochs):
+        model.train()
+        model.bias.W.requires_grad_(False)
         step_losses = []
         with tqdm(trainloader, unit="batch") as tepoch:
             for input in tepoch:
@@ -46,8 +77,7 @@ def train(
                 optimizer.zero_grad()
                 input = input.to(cfg.device)
                 y_pred = model(input)
-                y_pred_r = renderer(y_pred)
-                loss = criterion(y_pred_r, input)
+                loss = criterion(y_pred, input)
                 # loss += calculate_penalization(y_pred, device)
                 loss.backward()
                 optimizer.step()
@@ -59,8 +89,7 @@ def train(
             for i, vdata in enumerate(valloader):
                 vinputs = vdata.to(cfg.device)
                 voutputs = model(vinputs)
-                voutputs_r = renderer(voutputs)
-                vloss = torch.sqrt(criterion(voutputs_r, vinputs))
+                vloss = torch.sqrt(criterion(voutputs, vinputs))
                 running_vloss += vloss
 
         avg_vloss = running_vloss / (i + 1)
