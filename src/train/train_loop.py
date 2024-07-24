@@ -69,7 +69,7 @@ def train(
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     for epoch in range(cfg.epochs):
         model.train()
-        model.bias.W.requires_grad_(False)
+        # model.bias.W.requires_grad_(False)
         step_losses = []
         with tqdm(trainloader, unit="batch") as tepoch:
             for input in tepoch:

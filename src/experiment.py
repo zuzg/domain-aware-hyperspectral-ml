@@ -40,8 +40,8 @@ class Experiment:
 
         bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
         bias_renderer_model = bias_renderer.model(self.cfg.device, CHANNELS)
-        bias_shape = (self.cfg.batch_size, self.cfg.k, bias_renderer.num_params, self.cfg.img_size, self.cfg.img_size)
-        bias_model = BiasModel(bias_shape, bias_renderer_model)
+        bias_shape = (self.cfg.k, bias_renderer.num_params)
+        bias_model = BiasModel(bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device)
         bias_model = pretrain(bias_model, trainloader, self.cfg)
 
         model = train(variance_model, bias_model, trainloader, valloader, self.cfg)

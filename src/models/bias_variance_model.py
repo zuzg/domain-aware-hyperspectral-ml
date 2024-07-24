@@ -7,13 +7,21 @@ from src.models.renderers.base_renderer import BaseRenderer
 
 
 class BiasModel(nn.Module):
-    def __init__(self, shape: tuple[int], renderer: BaseRenderer):
+    def __init__(self, shape: tuple[int], batch_size: int, img_size: int, renderer: BaseRenderer, device: str):
         super().__init__()
-        self.W = nn.Parameter(torch.randn(shape), requires_grad=True)
+        rand_init = torch.FloatTensor(shape).uniform_(-1, 1)
+        rand_init = rand_init.to(device)
+        self.W = nn.Parameter(rand_init, requires_grad=True)
+        self.batch_size = batch_size
+        self.img_size = img_size
         self.renderer = renderer
 
     def forward(self, x: Tensor) -> Tensor:
-        x = self.renderer(self.W)
+        x = self.W.unsqueeze(0)
+        x = x.repeat(self.batch_size, 1, 1)
+        x = x.unsqueeze(-1).unsqueeze(-1)
+        x = x.repeat(1, 1, 1, self.img_size, self.img_size)
+        x = self.renderer(x)
         return x
 
 
