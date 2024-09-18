@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
 import wandb
 from scipy.stats import norm
@@ -11,11 +10,12 @@ from src.consts import CHANNELS
 
 def plot_partial_hats(pixel_hats: Tensor) -> None:
     fig = go.Figure()
-    x = np.linspace(0, CHANNELS-1)
+    x = np.linspace(1, CHANNELS, num=150)
     for i, stats in enumerate(pixel_hats):
         stats = stats.cpu().detach().numpy()
-        dist = norm.pdf(range(0, CHANNELS), CHANNELS * stats[0], CHANNELS * stats[1])
-        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"hat {i}"))
+        mu, sigma = CHANNELS * stats[0], CHANNELS * stats[1]
+        dist = norm.pdf(range(0, CHANNELS), mu, sigma) + stats[2]
+        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}"))
     fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_hats": fig})
 
@@ -41,6 +41,15 @@ def plot_partial_polynomials_degree(polys: Tensor, k: int) -> None:
         fig.add_traces(go.Scatter(x=x, y=poly, mode="lines", name=f"{params[0]:.2f}*x^{exp[i]:.0f}"))
     fig.update_layout(title="Partial functions for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_polys_degree": fig})
+
+
+def plot_splines(splines: Tensor) -> None:
+    fig = plt.figure(figsize=(10, 5))
+    plt.plot(splines.cpu().detach().numpy(), label="splines")
+    plt.xlabel("Band")
+    fig.legend()
+    plt.title("Splines")
+    wandb.log({"splines": fig})
 
 
 def plot_images(gt_img: Tensor, pred_img: Tensor) -> None:
@@ -72,3 +81,12 @@ def plot_pixelwise(gt_img: Tensor, pred_img: Tensor, size: int) -> None:
             axs[i, j].plot(pred_img[:, i, j])
             axs[i, j].plot(gt_img[:, i, j])
     wandb.log({"pixelwise": wandb.Image(fig)})
+
+
+def plot_bias(bias: Tensor) -> None:
+    fig = plt.figure(figsize=(10, 5))
+    plt.plot(bias.cpu().detach().numpy(), label="bias")
+    plt.xlabel("Band")
+    fig.legend()
+    plt.title("Bias")
+    wandb.log({"bias": fig})

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -16,7 +17,7 @@ class BiasModel(nn.Module):
         self.img_size = img_size
         self.renderer = renderer
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: int) -> Tensor:
         x = self.W.unsqueeze(0)
         x = x.repeat(self.batch_size, 1, 1)
         x = x.unsqueeze(-1).unsqueeze(-1)
@@ -38,13 +39,15 @@ class VarianceModel(nn.Module):
 
 
 class BiasVarianceModel(nn.Module):
-    def __init__(self, bias: BiasModel | None, variance: VarianceModel):
+    def __init__(self, bias: BiasModel | np.ndarray | None, variance: VarianceModel):
         super().__init__()
         self.bias = bias
         self.variance = variance
 
     def forward(self, x: Tensor):
         x = self.variance(x)
-        if self.bias:
+        if self.bias is not None and isinstance(self.bias, BiasModel):
             x += self.bias(0)
+        elif self.bias is not None:
+            x += self.bias
         return x
