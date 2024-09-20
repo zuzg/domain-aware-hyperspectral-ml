@@ -64,7 +64,7 @@ def train(
     cfg: ExperimentConfig,
 ) -> tuple[nn.Module]:
     model = BiasVarianceModel(bias_model, variance_model)
-    criterion = nn.MSELoss()
+    criterion = nn.MSELoss(reduction="sum")
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     for epoch in range(cfg.epochs):
@@ -73,6 +73,7 @@ def train(
         step_losses = []
         with tqdm(trainloader, unit="batch") as tepoch:
             for input in tepoch:
+                div = np.count_nonzero(input)
                 tepoch.set_description(f"Epoch {epoch}")
                 optimizer.zero_grad()
                 input = input.to(cfg.device)
@@ -81,8 +82,8 @@ def train(
                 # loss += calculate_penalization(y_pred, device)
                 loss.backward()
                 optimizer.step()
-                tepoch.set_postfix(loss=loss.item())
-                step_losses.append(loss.cpu().detach().numpy())
+                tepoch.set_postfix(loss=loss.item()/div)
+                step_losses.append(loss.cpu().detach().numpy()/div)
         model.eval()
         running_vloss = 0.0
         with torch.no_grad():
