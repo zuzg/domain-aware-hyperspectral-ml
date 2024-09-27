@@ -22,12 +22,13 @@ class HyperviewDataset(Dataset):
         return image
 
     def load_images(self, directory: str) -> list[Tensor]:
-        filenames = Path(directory).rglob("*.npz")
+        filenames = list(Path(directory).rglob("*.npz"))
+        filenames = sorted(filenames, key=lambda i: int(i.name.split(".")[0]))
         image_list = []
         for filename in filenames:
             with np.load(filename) as npz:
                 arr = np.ma.MaskedArray(**npz)
                 img = arr.data
                 img[img > self.max_val] = self.max_val  # clip outliers to max_val
-                image_list.append(torch.from_numpy(arr.data).float())
+                image_list.append(torch.from_numpy(img).float())
         return image_list

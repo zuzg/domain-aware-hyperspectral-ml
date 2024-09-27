@@ -82,16 +82,17 @@ def train(
                 # loss += calculate_penalization(y_pred, device)
                 loss.backward()
                 optimizer.step()
-                tepoch.set_postfix(loss=loss.item()/div)
-                step_losses.append(loss.cpu().detach().numpy()/div)
+                tepoch.set_postfix(loss=loss.item() / div)
+                step_losses.append(loss.cpu().detach().numpy() / div)
         model.eval()
         running_vloss = 0.0
         with torch.no_grad():
             for i, vdata in enumerate(valloader):
+                vdiv = np.count_nonzero(vdata)
                 vinputs = vdata.to(cfg.device)
                 voutputs = model(vinputs)
-                vloss = torch.sqrt(criterion(voutputs, vinputs))
-                running_vloss += vloss
+                vloss = criterion(voutputs, vinputs)
+                running_vloss += vloss / vdiv
 
         avg_vloss = running_vloss / (i + 1)
         if cfg.wandb:

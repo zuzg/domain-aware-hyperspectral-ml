@@ -4,8 +4,9 @@ import torch
 from torch.utils.data import DataLoader, random_split
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, MAX_DIM, MAX_PATH, MEAN_PATH, SPLIT_RATIO, TRAIN_PATH, RENDERERS_DICT
+from src.consts import CHANNELS, MAX_DIM, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_PATH, RENDERERS_DICT
 from src.data.dataset import HyperviewDataset
+from src.data.preprocessing import mean_to_bias
 from src.eval.eval_loop import evaluate
 from src.models.bias_variance_model import BiasModel, VarianceModel
 from src.models.modeller import Modeller
@@ -15,10 +16,11 @@ from train.train_loop import pretrain, train
 class Experiment:
     def __init__(self, cfg: ExperimentConfig) -> None:
         self.cfg = cfg
+        self.name = f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}"
         if self.cfg.wandb:
             wandb.init(
                 project="hyperview",
-                name=f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}",
+                name=self.name,
                 config=vars(self.cfg),
             )
 
@@ -40,14 +42,7 @@ class Experiment:
         variance_model = VarianceModel(modeller, variance_renderer_model)
 
         if self.cfg.bias_renderer == "Mean":
-            with open(MEAN_PATH, "rb") as f:
-                bias_mean = np.load(f)
-                bias_mean = bias_mean / maxx
-                bias_mean = torch.from_numpy(bias_mean).to(self.cfg.device)
-
-            bias_model = bias_mean.repeat(self.cfg.batch_size, 1)
-            bias_model = bias_model.unsqueeze(-1).unsqueeze(-1)
-            bias_model = bias_model.repeat(1, 1, img_size, img_size)
+            bias_model = mean_to_bias(MEAN_PATH, maxx, self.cfg.device, img_size, self.cfg.batch_size)
         else:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
             bias_renderer_model = bias_renderer.model(self.cfg.device, CHANNELS)
@@ -58,6 +53,8 @@ class Experiment:
             bias_model = pretrain(bias_model, trainloader, self.cfg)
 
         model = train(variance_model, bias_model, trainloader, valloader, self.cfg)
+        if self.cfg.save_model:
+            torch.save(model.variance.modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}.pth")
 
         if self.cfg.wandb:
             evaluate(model, testloader, self.cfg)

@@ -15,6 +15,7 @@ class ExperimentConfig:
     lr: float
     device: str
     wandb: bool
+    save_model: bool
 
 
 @dataclass

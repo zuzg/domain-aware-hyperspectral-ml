@@ -16,6 +16,7 @@ def parse_args() -> ExperimentConfig:
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--wandb", type=bool, default=True)
+    parser.add_argument("--save_model", type=bool, default=True)
 
     args = parser.parse_args()
 
