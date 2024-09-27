@@ -1,3 +1,5 @@
+import cmcrameri.cm as cmc
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
@@ -53,19 +55,25 @@ def plot_splines(splines: Tensor) -> None:
 
 
 def plot_images(gt_img: Tensor, pred_img: Tensor) -> None:
+    pred_img[gt_img == 0] = np.nan
+    gt_img[gt_img == 0] = np.nan
+    cmap = matplotlib.colormaps.get_cmap(cmc.batlow)
+    cmap.set_bad("white")
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
     fig.suptitle("Band 0")
-    axs[0].imshow(gt_img[0], vmin=0, vmax=1)
+    axs[0].imshow(gt_img[0], cmap=cmap)
     axs[0].set_title("GT")
-    axs[1].imshow(pred_img[0], vmin=0, vmax=1)
+    axs[1].imshow(pred_img[0], cmap=cmap)
     axs[1].set_title("PRED")
     wandb.log({"images": fig})
 
 
 def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor) -> None:
     fig = plt.figure(figsize=(10, 5))
-    gt_mean_spectral_reflectance = [gt_img[i].mean() for i in range(gt_img.shape[0])]
-    pred_mean_spectral_reflectance = [pred_img[i].mean() for i in range(pred_img.shape[0])]
+    pred_img[gt_img == 0] = np.nan
+    gt_img[gt_img == 0] = np.nan
+    gt_mean_spectral_reflectance = [np.nanmean(gt_img[i]) for i in range(gt_img.shape[0])]
+    pred_mean_spectral_reflectance = [np.nanmean(pred_img[i]) for i in range(pred_img.shape[0])]
     plt.plot(pred_mean_spectral_reflectance, label="PRED")
     plt.plot(gt_mean_spectral_reflectance, label="GT")
     plt.xlabel("Band")
@@ -75,11 +83,11 @@ def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor) -> None:
 
 
 def plot_pixelwise(gt_img: Tensor, pred_img: Tensor, size: int) -> None:
-    fig, axs = plt.subplots(size, size, figsize=(20, 25))
-    for i in range(size):
-        for j in range(size):
-            axs[i, j].plot(pred_img[:, i, j])
-            axs[i, j].plot(gt_img[:, i, j])
+    fig, axs = plt.subplots(10, 10, figsize=(20, 25))
+    for i in range(10):
+        for j in range(10):
+            axs[i, j].plot(pred_img[:, i + size, j + size])
+            axs[i, j].plot(gt_img[:, i + size, j + size])
     wandb.log({"pixelwise": wandb.Image(fig)})
 
 

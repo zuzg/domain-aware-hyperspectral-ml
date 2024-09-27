@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader, random_split
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, MAX_DIM, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_PATH, RENDERERS_DICT
+from src.consts import CHANNELS, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_PATH, RENDERERS_DICT
 from src.data.dataset import HyperviewDataset
 from src.data.preprocessing import mean_to_bias
 from src.eval.eval_loop import evaluate
@@ -29,26 +29,25 @@ class Experiment:
         with open(MAX_PATH, "rb") as f:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
-        img_size = MAX_DIM
-        dataset = HyperviewDataset(TRAIN_PATH, img_size, self.cfg.max_val, 0, maxx)
+        dataset = HyperviewDataset(TRAIN_PATH, self.cfg.img_size, self.cfg.max_val, 0, maxx)
         train_set, val_set, test_set = random_split(dataset, SPLIT_RATIO)
-        trainloader = DataLoader(train_set, batch_size=self.cfg.batch_size, shuffle=True)
-        valloader = DataLoader(val_set, batch_size=self.cfg.batch_size)
+        trainloader = DataLoader(train_set, batch_size=self.cfg.batch_size, shuffle=True, drop_last=True)
+        valloader = DataLoader(val_set, batch_size=self.cfg.batch_size, drop_last=True)
         testloader = DataLoader(test_set, batch_size=self.cfg.batch_size, drop_last=True)
 
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         variance_renderer_model = variance_renderer.model(self.cfg.device, CHANNELS)
-        modeller = Modeller(img_size, CHANNELS, self.cfg.k, variance_renderer.num_params).to(self.cfg.device)
+        modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, variance_renderer.num_params).to(self.cfg.device)
         variance_model = VarianceModel(modeller, variance_renderer_model)
 
         if self.cfg.bias_renderer == "Mean":
-            bias_model = mean_to_bias(MEAN_PATH, maxx, self.cfg.device, img_size, self.cfg.batch_size)
+            bias_model = mean_to_bias(MEAN_PATH, maxx, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
         else:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
             bias_renderer_model = bias_renderer.model(self.cfg.device, CHANNELS)
             bias_shape = (self.cfg.k, bias_renderer.num_params)
             bias_model = BiasModel(
-                bias_shape, self.cfg.batch_size, img_size, bias_renderer_model, self.cfg.device
+                bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device
             )
             bias_model = pretrain(bias_model, trainloader, self.cfg)
 

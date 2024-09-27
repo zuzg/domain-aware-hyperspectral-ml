@@ -19,7 +19,6 @@ STD_PATH: Path = STATS_PATH / "std_c.npy"
 # data
 SPLIT_RATIO: list[int] = [1400, 200, 132]
 CHANNELS: int = 150
-MAX_DIM = 10
 
 # models
 RENDERERS_DICT: dict[str, RendererConfig] = {
