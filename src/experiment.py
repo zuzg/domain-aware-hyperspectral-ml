@@ -16,7 +16,7 @@ from train.train_loop import pretrain, train
 class Experiment:
     def __init__(self, cfg: ExperimentConfig) -> None:
         self.cfg = cfg
-        self.name = f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}"
+        self.name = f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}_masked"
         if self.cfg.wandb:
             wandb.init(
                 project="hyperview",
