@@ -37,23 +37,25 @@ def evaluate(
             raw_outputs.append(out)
             renders.append(rendered)
 
-    i = 1
-    gt_img = imgs[0][i].cpu().detach().numpy()
-    pred_img = renders[0][i].cpu().detach().numpy()
-    img_size = gt_img.shape[1]
-    img_center = img_size // 2
 
-    plot_images(gt_img, pred_img)
-    plot_average_reflectance(gt_img, pred_img)
-    plot_pixelwise(gt_img, pred_img, img_center)
-    if cfg.variance_renderer == "GaussianRenderer":
-        plot_partial_hats(raw_outputs[0][i, ..., img_center, img_center])
-    elif cfg.variance_renderer == "PolynomialRenderer":
-        plot_partial_polynomials(raw_outputs[0][i, ..., img_center, img_center])
-    elif cfg.variance_renderer == "PolynomialDegreeRenderer":
-        plot_partial_polynomials_degree(raw_outputs[0][i, ..., img_center, img_center], cfg.k)
-    elif cfg.variance_renderer == "SplineRenderer":
-        plot_splines(variance_model.renderer(out)[0, :, 0, 0])
+    ids = [1, 3, 5]
+    for i in ids:
+        gt_img = imgs[i][0].cpu().detach().numpy()
+        pred_img = renders[i][0].cpu().detach().numpy()
+        img_size = gt_img.shape[1]
+        img_center = img_size // 2
+
+        plot_images(gt_img, pred_img)
+        plot_average_reflectance(gt_img, pred_img)
+        plot_pixelwise(gt_img, pred_img, img_center)
+        if cfg.variance_renderer == "GaussianRenderer":
+            plot_partial_hats(raw_outputs[i][0, ..., img_center, img_center])
+        elif cfg.variance_renderer == "PolynomialRenderer":
+            plot_partial_polynomials(raw_outputs[i][0, ..., img_center, img_center])
+        elif cfg.variance_renderer == "PolynomialDegreeRenderer":
+            plot_partial_polynomials_degree(raw_outputs[i][0, ..., img_center, img_center], cfg.k)
+        elif cfg.variance_renderer == "SplineRenderer":
+            plot_splines(variance_model.renderer(out)[i, :, 0, 0])
 
     if cfg.bias_renderer == "Mean":
         bias = bias_model
