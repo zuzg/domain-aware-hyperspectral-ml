@@ -15,14 +15,14 @@ class GaussianRenderer(BaseRenderer):
         rendered = torch.zeros((batch_size, self.channels, h, w))
 
         for idx in range(batch_size):
-            dists = self.generate_distribution(batch[idx, :, 0, ...], batch[idx, :, 1, ...])
+            dists = self.generate_distribution(batch[idx, :, 0, ...], batch[idx, :, 1, ...], batch[idx, :, 2, ...])
             pixel_dist = torch.sum(dists, dim=0)
-            rendered[idx] = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 2, ...]
+            rendered[idx] = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]
 
         return rendered.to(self.device)
 
-    def generate_distribution(self, mu: Tensor, sigma: Tensor) -> Tensor:
+    def generate_distribution(self, mu: Tensor, sigma: Tensor, scale: Tensor) -> Tensor:
         eps = 1e-4
         sigma = torch.add(sigma, eps)
         normal_dist = Normal(self.channels * mu.unsqueeze(-1), self.channels * sigma.unsqueeze(-1))
-        return torch.exp(normal_dist.log_prob(self.bands))
+        return self.channels * scale.unsqueeze(-1) * torch.exp(normal_dist.log_prob(self.bands))

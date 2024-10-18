@@ -38,7 +38,7 @@ def evaluate(
             renders.append(rendered)
 
 
-    ids = [1, 3, 5]
+    ids = [1, 2, 3]
     for i in ids:
         gt_img = imgs[i][0].cpu().detach().numpy()
         pred_img = renders[i][0].cpu().detach().numpy()

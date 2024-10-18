@@ -13,12 +13,12 @@ from src.consts import CHANNELS
 def plot_partial_hats(pixel_hats: Tensor) -> None:
     fig = go.Figure()
     x = np.linspace(1, CHANNELS, num=150)
-    shift = pixel_hats[0][2].cpu().detach().numpy()
+    shift = pixel_hats[0][3].cpu().detach().numpy()
     for stats in pixel_hats:
         stats = stats.cpu().detach().numpy()
-        mu, sigma = CHANNELS * stats[0], CHANNELS * stats[1]
+        mu, sigma, scale = CHANNELS * stats[0], CHANNELS * stats[1], CHANNELS * stats[2]
         dist = norm.pdf(range(0, CHANNELS), mu, sigma) + shift
-        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}"))
+        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
     fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_hats": fig})
 

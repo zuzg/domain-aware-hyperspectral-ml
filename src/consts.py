@@ -22,7 +22,7 @@ CHANNELS: int = 150
 
 # models
 RENDERERS_DICT: dict[str, RendererConfig] = {
-    "GaussianRenderer": RendererConfig(GaussianRenderer, 3),
+    "GaussianRenderer": RendererConfig(GaussianRenderer, 4),
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
     "SplineRenderer": RendererConfig(SplineRenderer, 1),
