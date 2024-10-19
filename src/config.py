@@ -16,6 +16,7 @@ class ExperimentConfig:
     device: str
     wandb: bool
     save_model: bool
+    predict_soil: bool
 
 
 @dataclass

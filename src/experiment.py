@@ -1,16 +1,18 @@
 import numpy as np
 import wandb
 import torch
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, random_split
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_PATH, RENDERERS_DICT
+from src.consts import CHANNELS, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_IDS, TRAIN_PATH, RENDERERS_DICT
 from src.data.dataset import HyperviewDataset
 from src.data.preprocessing import mean_to_bias
 from src.eval.eval_loop import evaluate
 from src.models.bias_variance_model import BiasModel, VarianceModel
 from src.models.modeller import Modeller
-from train.train_loop import pretrain, train
+from src.soil_params.pred import predict_soil_parameters
+from src.train.train_loop import pretrain, train
 
 
 class Experiment:
@@ -29,8 +31,11 @@ class Experiment:
         with open(MAX_PATH, "rb") as f:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
-        dataset = HyperviewDataset(TRAIN_PATH, self.cfg.img_size, self.cfg.max_val, 0, maxx)
-        train_set, val_set, test_set = random_split(dataset, SPLIT_RATIO)
+
+        splits = np.split(np.random.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
+        train_set = HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, maxx)
+        val_set = HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, maxx)
+        test_set = HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, maxx)
         trainloader = DataLoader(train_set, batch_size=self.cfg.batch_size, shuffle=True, drop_last=True)
         valloader = DataLoader(val_set, batch_size=self.cfg.batch_size, drop_last=True)
         testloader = DataLoader(test_set, batch_size=self.cfg.batch_size, drop_last=True)
@@ -57,4 +62,8 @@ class Experiment:
 
         if self.cfg.wandb:
             evaluate(model, testloader, self.cfg)
-            wandb.finish()
+
+        if self.cfg.predict_soil:
+            predict_soil_parameters(test_set, model.variance.modeller, variance_renderer.num_params, self.cfg)
+        
+        wandb.finish()
