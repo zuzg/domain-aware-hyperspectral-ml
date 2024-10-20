@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -23,14 +22,17 @@ def prepare_datasets(
     num_params: int,
     batch_size: int,
     channels: int,
+    device: str,
 ) -> tuple[np.ndarray]:
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     imgs = []
     preds = []
 
     for data in dataloader:
+        data = data.to(device)
         pred = model(data)
-        pred = pred.detach().numpy()
+        data = data.cpu().detach().numpy()
+        pred = pred.cpu().detach().numpy()
         # last param is shift - take it only once for all hats
         shift = pred[:, 0, num_params - 1 :]
         pred[:, :, num_params - 1] = shift
@@ -73,7 +75,7 @@ def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray,
 
 
 def samples_number_experiment(
-    x: np.ndarray, y: np.ndarray, sample_nums: list[int], n_runs: int = 2
+    x: np.ndarray, y: np.ndarray, sample_nums: list[int], n_runs: int = 10
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     mses_mean = []
     mses_std = []
@@ -91,42 +93,8 @@ def samples_number_experiment(
         mses_for_sample = np.array(mses_for_sample)
         mses_mean.append(mses_for_sample.mean(axis=0))
         mses_std.append(mses_for_sample.std(axis=0))
+    wandb.log({"soil/P": mses_mean[0][0], "soil/K": mses_mean[0][1], "soil/Mg": mses_mean[0][2],"soil/pH": mses_mean[0][3],})
     return np.array(mses_mean), np.array(mses_std)
-
-
-def plot_soil_params_mp(
-    samples: list[int],
-    mean_img: np.ndarray,
-    std_img: np.ndarray,
-    mean_pred: np.ndarray,
-    std_pred: np.ndarray,
-    gt: pd.DataFrame,
-    k: int,
-    num_params: int,
-) -> None:
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle("MLP: mean and std of MSE for each predicted soil parameter")
-    x = list(range(len(samples)))
-
-    for i, ax in enumerate(axs.reshape(-1)):
-        ax.fill_between(
-            x, mean_img[:, i] - std_img[:, i], mean_img[:, i] + std_img[:, i], alpha=0.5
-        )
-        ax.fill_between(
-            x, mean_pred[:, i] - std_pred[:, i], mean_pred[:, i] + std_pred[:, i], alpha=0.5
-        )
-        ax.plot(x, mean_img[:, i], "-", label="150 channels")
-        ax.plot(x, mean_pred[:, i], "-", label=f"{k*num_params-k+1} features (ours)")
-
-        ax.legend()
-        ax.set_xlabel("Number of samples")
-        ax.set_ylabel("MSE")
-        ax.set_title(gt.columns[i])
-        ax.set_xticks(x)
-        ax.set_xticklabels(samples)
-
-    plt.tight_layout()
-    wandb.log({"soil_params": fig})
 
 
 def plot_soil_params(
@@ -165,12 +133,12 @@ def plot_soil_params(
             )
             fig.add_trace(
                 go.Scatter(
-                    name="+std",
+                    name="-std",
                     x=x,
-                    y=means[j][:, i] + stds[j][:, i],
+                    y=means[j][:, i] - stds[j][:, i],
+                    opacity=0.4,
                     marker=dict(color=colors[j]),
                     mode="lines",
-                    line=dict(width=0),
                     showlegend=False,
                 ),
                 row=row,
@@ -178,15 +146,12 @@ def plot_soil_params(
             )
             fig.add_trace(
                 go.Scatter(
-                    name="-std",
+                    name="+std",
                     x=x,
-                    y=means[j][:, i] - stds[j][:, i],
-                    opacity=0.5,
+                    y=means[j][:, i] + stds[j][:, i],
+                    opacity=0.4,
                     marker=dict(color=colors[j]),
-                    line=dict(width=0),
                     mode="lines",
-                    fill="tonexty",
-                    fillcolor=colors[j],
                     showlegend=False,
                 ),
                 row=row,
@@ -205,9 +170,9 @@ def predict_soil_parameters(
     num_params: int,
     cfg: ExperimentConfig,
 ) -> None:
-    imgs_agg, preds_agg = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, CHANNELS)
+    imgs_agg, preds_agg = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, CHANNELS, cfg.device)
     gt = prepare_gt(dataset.ids)
-    samples = [len(dataset), 250, 200, 150, 100, 50, 25, 10]
+    samples = [500, 250, 200, 150, 100, 50, 25, 10]
 
     mses_mean_img, mses_std_img = samples_number_experiment(imgs_agg, gt, samples)
     mses_mean_pred, mses_std_pred = samples_number_experiment(preds_agg, gt, samples)
