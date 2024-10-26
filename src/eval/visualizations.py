@@ -10,13 +10,22 @@ from torch import Tensor
 from src.consts import CHANNELS
 
 
-def plot_partial_hats(pixel_hats: Tensor) -> None:
+def plot_partial_hats(pixel_hats: Tensor, mu_type: str) -> None:
     fig = go.Figure()
-    x = np.linspace(1, CHANNELS, num=150)
+    x = np.linspace(1, CHANNELS, num=CHANNELS)
     shift = pixel_hats[0][3].cpu().detach().numpy()
-    for stats in pixel_hats:
+    k = len(pixel_hats)
+    fix_ref = CHANNELS // k
+    intervals = [CHANNELS / (k + 2) * i for i in range(1, k + 1)]
+    for i, stats in enumerate(pixel_hats):
         stats = stats.cpu().detach().numpy()
-        mu, sigma, scale = CHANNELS * stats[0], CHANNELS * stats[1], CHANNELS * stats[2]
+        if mu_type == "unconstrained":
+            mu = CHANNELS * stats[0]
+        elif mu_type == "fixed_reference":
+            mu = stats[0] * fix_ref + (fix_ref * i)
+        elif mu_type == "equal_interval":
+            mu = intervals[i]
+        sigma, scale = CHANNELS * stats[1], CHANNELS * stats[2]
         dist = scale * norm.pdf(range(0, CHANNELS), mu, sigma) + shift
         fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
     fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")

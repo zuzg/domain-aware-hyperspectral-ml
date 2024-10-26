@@ -38,7 +38,7 @@ def evaluate(
             renders.append(rendered)
 
 
-    ids = [1, 2, 3]
+    ids = [1, 8, 10]
     for i in ids:
         gt_img = imgs[i][0].cpu().detach().numpy()
         pred_img = renders[i][0].cpu().detach().numpy()
@@ -49,7 +49,7 @@ def evaluate(
         plot_average_reflectance(gt_img, pred_img)
         plot_pixelwise(gt_img, pred_img, img_center)
         if cfg.variance_renderer == "GaussianRenderer":
-            plot_partial_hats(raw_outputs[i][0, ..., img_center, img_center])
+            plot_partial_hats(raw_outputs[i][0, ..., img_center, img_center], cfg.mu_type)
         elif cfg.variance_renderer == "PolynomialRenderer":
             plot_partial_polynomials(raw_outputs[i][0, ..., img_center, img_center])
         elif cfg.variance_renderer == "PolynomialDegreeRenderer":

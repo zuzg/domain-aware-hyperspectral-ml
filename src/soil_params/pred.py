@@ -112,7 +112,7 @@ def plot_soil_params(
     means = [mean_img, mean_pred]
     stds = [std_img, std_pred]
     palette = px.colors.qualitative.Plotly
-    names = ["150 channels", f"{k*num_params-k+1} features (ours)"]
+    names = ["Raw-150", f"ModG-{k*num_params-k+1}"]  # TODO Latent-n
     colors = [palette[i % len(palette)] for i in range(2)]
 
     for i in range(4):
