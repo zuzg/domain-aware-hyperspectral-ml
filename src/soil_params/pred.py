@@ -23,6 +23,7 @@ def prepare_datasets(
     batch_size: int,
     channels: int,
     device: str,
+    ae: bool,
 ) -> tuple[np.ndarray]:
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     imgs = []
@@ -34,20 +35,26 @@ def prepare_datasets(
         data = data.cpu().detach().numpy()
         pred = pred.cpu().detach().numpy()
         # last param is shift - take it only once for all hats
-        shift = pred[:, 0, num_params - 1 :]
-        pred[:, :, num_params - 1] = shift
+        if not ae:
+            shift = pred[:, 0, num_params - 1 :]
+            pred[:, :, num_params - 1] = shift
         mask = data[:, 0] == 0
 
         expanded_mask = np.expand_dims(mask, axis=1)
-        crop_mask = np.repeat(expanded_mask, repeats=150, axis=1)
+        crop_mask = np.repeat(expanded_mask, repeats=CHANNELS, axis=1)
         masked_data = np.where(crop_mask == 0, data, np.nan)
-
-        expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
-        crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
-        masked_pred = np.where(crop_mask == 0, pred, np.nan)
-
         data_mean = np.nanmean(masked_data, axis=(2, 3))
-        pred_mean = np.nanmean(masked_pred, axis=(3, 4))
+
+        if not ae:
+            expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
+            crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
+            masked_pred = np.where(crop_mask == 0, pred, np.nan)
+            pred_mean = np.nanmean(masked_pred, axis=(3, 4))
+        else:
+            expanded_mask = np.expand_dims(mask, axis=1)
+            crop_mask = np.repeat(expanded_mask, repeats=k * num_params, axis=1)
+            masked_data = np.where(crop_mask == 0, pred, np.nan)
+            pred_mean = np.nanmean(masked_data, axis=(2, 3))
         imgs.append(data_mean)
         preds.append(pred_mean)
 
@@ -169,8 +176,9 @@ def predict_soil_parameters(
     model: Modeller,
     num_params: int,
     cfg: ExperimentConfig,
+    ae: bool,
 ) -> None:
-    imgs_agg, preds_agg = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, CHANNELS, cfg.device)
+    imgs_agg, preds_agg = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, CHANNELS, cfg.device, ae)
     gt = prepare_gt(dataset.ids)
     samples = [500, 250, 200, 150, 100, 50, 25, 10]
 

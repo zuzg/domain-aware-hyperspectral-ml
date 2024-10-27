@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
-from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 
 
 def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
@@ -29,14 +28,14 @@ def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
 
 
 def pretrain(
-    bias_model: BiasModel,
+    bias_model: nn.Module,
     trainloader: DataLoader,
     cfg: ExperimentConfig,
 ) -> nn.Module:
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(bias_model.parameters(), lr=cfg.lr)
+    optimizer = torch.optim.Adam(bias_model.parameters(), lr=cfg.lr / 10)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-    for epoch in range(cfg.epochs):
+    for epoch in range(2 * cfg.epochs):
         step_losses = []
         with tqdm(trainloader, unit="batch") as tepoch:
             for input in tepoch:
@@ -57,13 +56,11 @@ def pretrain(
 
 
 def train(
-    variance_model: VarianceModel,
-    bias_model: BiasModel | None,
+    model: nn.Module,
     trainloader: DataLoader,
     valloader: DataLoader,
     cfg: ExperimentConfig,
-) -> tuple[nn.Module]:
-    model = BiasVarianceModel(bias_model, variance_model)
+) -> nn.Module:
     criterion = nn.MSELoss(reduction="sum")
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)

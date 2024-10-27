@@ -1,14 +1,16 @@
 import numpy as np
 import wandb
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
 from src.config import ExperimentConfig
 from src.consts import CHANNELS, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_IDS, TRAIN_PATH, RENDERERS_DICT
 from src.data.dataset import HyperviewDataset
 from src.data.preprocessing import mean_to_bias
-from src.eval.eval_loop import evaluate
-from src.models.bias_variance_model import BiasModel, VarianceModel
+from src.eval.eval_loop import Evaluator
+from src.models.autoencoder import Autoencoder
+from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 from src.models.modeller import Modeller
 from src.soil_params.pred import predict_soil_parameters
 from src.train.train_loop import pretrain, train
@@ -17,60 +19,93 @@ from src.train.train_loop import pretrain, train
 class Experiment:
     def __init__(self, cfg: ExperimentConfig) -> None:
         self.cfg = cfg
-        self.name = (
-            f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}"
-        )
+        self.ae = self.cfg.variance_renderer == "None" and self.cfg.bias_renderer == "None"
         if self.cfg.wandb:
-            wandb.init(
-                project="hyperview", name=self.name, config=vars(self.cfg), tags=[f"μ: {self.cfg.mu_type}"],
-            )
+            self.name, self.tags = self._set_experiment_name_and_tags()
+            self._initialize_wandb()
+
+    def _set_experiment_name_and_tags(self) -> tuple[str, list[str]]:
+        if self.ae:
+            return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
+        return f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}", [
+            f"μ: {self.cfg.mu_type}"
+        ]
+
+    def _initialize_wandb(self) -> None:
+        wandb.init(
+            project="hyperview",
+            name=self.name,
+            config=vars(self.cfg),
+            tags=self.tags,
+        )
 
     def prepare_datasets(self, div: np.ndarray) -> tuple[Dataset]:
         splits = np.split(np.random.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
-        trainset = HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True)
-        valset = HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True)
-        testset = HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div)
-        return trainset, valset, testset
+        return (
+            HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
+            HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
+            HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div),
+        )
 
-    def run(self) -> None:
-        torch.manual_seed(42)
+    def prepare_dataloaders(
+        self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
+        return (
+            DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, drop_last=True),
+            DataLoader(valset, batch_size=self.cfg.batch_size, drop_last=True),
+            DataLoader(testset, batch_size=self.cfg.batch_size, drop_last=True),
+        )
+
+    def _load_max_values(self) -> np.ndarray:
         with open(MAX_PATH, "rb") as f:
-            maxx = np.load(f)
-        maxx[maxx > self.cfg.max_val] = self.cfg.max_val
+            max_values = np.load(f)
+        max_values[max_values > self.cfg.max_val] = self.cfg.max_val
+        return max_values
 
-        trainset, valset, testset = self.prepare_datasets(maxx)
-        trainloader = DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, drop_last=True)
-        valloader = DataLoader(valset, batch_size=self.cfg.batch_size, drop_last=True)
-        testloader = DataLoader(testset, batch_size=self.cfg.batch_size, drop_last=True)
+    def _setup_autoencoder(self) -> nn.Module:
+        self.num_params = 3
+        return Autoencoder(CHANNELS, self.cfg.k, self.num_params).to(self.cfg.device)
 
+    def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
-        variance_renderer_model = variance_renderer.model(self.cfg.device, CHANNELS, self.cfg.mu_type)
-        modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, variance_renderer.num_params).to(self.cfg.device)
-        variance_model = VarianceModel(modeller, variance_renderer_model)
+        self.num_params = variance_renderer.num_params
+        modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, self.num_params).to(self.cfg.device)
+        variance_model = VarianceModel(modeller, variance_renderer.model(self.cfg.device, CHANNELS, self.cfg.mu_type))
+        bias_model = self._prepare_bias_model(div)
+        return BiasVarianceModel(bias_model, variance_model)
 
+    def _prepare_bias_model(self, div: np.ndarray) -> nn.Module:
         if self.cfg.bias_renderer == "Mean":
-            bias_model = mean_to_bias(MEAN_PATH, maxx, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
+            return mean_to_bias(MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
+
         else:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
             bias_renderer_model = bias_renderer.model(self.cfg.device, CHANNELS)
             bias_shape = (self.cfg.k, bias_renderer.num_params)
-            bias_model = BiasModel(
-                bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device
-            )
-            bias_model = pretrain(bias_model, trainloader, self.cfg)
-            # freeze bias model
+            bias_model = BiasModel(bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device)
+
+            bias_model = pretrain(bias_model, self.trainloader, self.cfg)
             for param in bias_model.parameters():
                 param.requires_grad = False
+        return bias_model
 
-        model = train(variance_model, bias_model, trainloader, valloader, self.cfg)
+    def run(self) -> None:
+        torch.manual_seed(42)
 
+        max_values = self._load_max_values()
+        trainset, valset, testset = self.prepare_datasets(max_values)
+        self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
+
+        model = self._setup_autoencoder() if self.ae else self._setup_bias_variance_model(max_values)
+        model = train(model, self.trainloader, self.valloader, self.cfg)
+
+        modeller = model.encoder if self.ae else model.variance.modeller
         if self.cfg.save_model:
-            torch.save(model.variance.modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}.pth")
+            torch.save(modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}.pth")
 
         if self.cfg.wandb:
-            evaluate(model, testloader, self.cfg)
-
+            Evaluator(model, self.cfg, self.ae).evaluate(self.testloader)
         if self.cfg.predict_soil:
-            predict_soil_parameters(testset, model.variance.modeller, variance_renderer.num_params, self.cfg)
-
+            predict_soil_parameters(
+                testset, modeller, self.num_params, self.cfg, self.ae
+            )
         wandb.finish()
