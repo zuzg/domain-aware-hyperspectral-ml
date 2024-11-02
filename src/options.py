@@ -12,11 +12,18 @@ def parse_args() -> ExperimentConfig:
     parser.add_argument(
         "--variance_renderer",
         type=str,
-        default="GaussianRenderer",
-        choices=["GaussianRenderer", "PolynomialDegreeRenderer", "PolynomialRenderer", "SplineRenderer", "None"],
+        default="Autoencoder",
+        choices=[
+            "GaussianRenderer",
+            "PolynomialDegreeRenderer",
+            "PolynomialRenderer",
+            "SplineRenderer",
+            "Autoencoder",
+            "None",
+        ],
     )
     parser.add_argument(
-        "--mu_type", type=str, default="unconstrained", choices=["equal_interval", "fixed_reference", "unconstrained"]
+        "--mu_type", type=str, default="equal_interval", choices=["equal_interval", "fixed_reference", "unconstrained"]
     )
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=32)
@@ -25,7 +32,7 @@ def parse_args() -> ExperimentConfig:
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--wandb", type=bool, default=True)
     parser.add_argument("--save_model", type=bool, default=False)
-    parser.add_argument("--predict_soil", type=bool, default=True)
+    parser.add_argument("--predict_soil", type=bool, default=False)
 
     args = parser.parse_args()
 

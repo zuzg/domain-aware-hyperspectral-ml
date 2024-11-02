@@ -39,7 +39,7 @@ class VarianceModel(nn.Module):
 
 
 class BiasVarianceModel(nn.Module):
-    def __init__(self, bias: BiasModel | np.ndarray | None, variance: VarianceModel):
+    def __init__(self, bias: BiasModel | np.ndarray | None, variance: nn.Module):
         super().__init__()
         self.bias = bias
         self.variance = variance
@@ -47,7 +47,7 @@ class BiasVarianceModel(nn.Module):
     def forward(self, x: Tensor):
         x = self.variance(x)
         if self.bias is not None and isinstance(self.bias, BiasModel):
-            x += self.bias(0)
+            x =  x + self.bias(0)
         elif self.bias is not None:
-            x += self.bias
+            x = x + self.bias
         return x

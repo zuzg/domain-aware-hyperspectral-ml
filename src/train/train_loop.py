@@ -77,16 +77,18 @@ def train_step(
     model.train()
     step_losses = []
 
-    for batch in tqdm(dataloader, unit="batch", desc=f"Epoch {epoch}"):
-        optimizer.zero_grad()
-        batch = batch.to(device)
-        mask = batch != 0
-        pred = model(batch)
+    with tqdm(dataloader, unit="batch", desc=f"Epoch {epoch}") as tepoch:
+        for batch in tepoch:
+            optimizer.zero_grad()
+            batch = batch.to(device)
+            mask = batch != 0
+            pred = model(batch)
 
-        loss = compute_loss(criterion, pred, batch, mask)
-        loss.backward()
-        optimizer.step()
-        step_losses.append(loss.item())
+            loss = compute_loss(criterion, pred, batch, mask)
+            loss.backward()
+            optimizer.step()
+            tepoch.set_postfix(loss=loss.item())
+            step_losses.append(loss.item())
 
     return np.mean(step_losses)
 

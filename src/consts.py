@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from src.config import RendererConfig
+from src.models.autoencoder import Autoencoder
 from src.models.renderers.gaussian_renderer import GaussianRenderer
 from src.models.renderers.polynomial_degree_renderer import PolynomialDegreeRenderer
 from src.models.renderers.polynomial_renderer import PolynomialRenderer
@@ -28,5 +29,6 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
     "SplineRenderer": RendererConfig(SplineRenderer, 1),
+    "Autoencoder": RendererConfig(Autoencoder, 3),
     "None": RendererConfig(None, 0),
 }

@@ -14,4 +14,4 @@ def mean_to_bias(mean_path: Path, divisor: np.ndarray, device: str, img_size: in
     bias_model = bias_mean.repeat(batch_size, 1)
     bias_model = bias_model.unsqueeze(-1).unsqueeze(-1)
     bias_model = bias_model.repeat(1, 1, img_size, img_size)
-    return bias_model
+    return bias_model.float()

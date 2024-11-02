@@ -9,6 +9,7 @@ class Encoder(nn.Module):
         self.conv1 = nn.Conv2d(channels, 64, kernel_size=1)
         self.conv2 = nn.Conv2d(64, 64, kernel_size=1)
         self.conv3 = nn.Conv2d(64, num_params * k, kernel_size=1)
+        self.float()
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.relu(self.conv1(x))
@@ -25,6 +26,7 @@ class Decoder(nn.Module):
         self.deconv2 = nn.Conv2d(64, 64, kernel_size=1)
         self.deconv3 = nn.Conv2d(64, channels, kernel_size=1)
         self.output_activation = nn.Sigmoid()
+        self.float()
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.relu(self.deconv1(x))

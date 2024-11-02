@@ -19,7 +19,7 @@ from src.train.train_loop import pretrain, train
 class Experiment:
     def __init__(self, cfg: ExperimentConfig) -> None:
         self.cfg = cfg
-        self.ae = self.cfg.variance_renderer == "None" and self.cfg.bias_renderer == "None"
+        self.ae = self.cfg.variance_renderer == "Autoencoder"
         if self.cfg.wandb:
             self.name, self.tags = self._set_experiment_name_and_tags()
             self._initialize_wandb()
@@ -61,9 +61,11 @@ class Experiment:
         max_values[max_values > self.cfg.max_val] = self.cfg.max_val
         return max_values
 
-    def _setup_autoencoder(self) -> nn.Module:
+    def _setup_autoencoder(self, div: np.ndarray) -> nn.Module:
         self.num_params = 3
-        return Autoencoder(CHANNELS, self.cfg.k, self.num_params).to(self.cfg.device)
+        variance_model =  Autoencoder(CHANNELS, self.cfg.k, self.num_params).to(self.cfg.device)
+        bias_model = self._prepare_bias_model(div)
+        return BiasVarianceModel(bias_model, variance_model)
 
     def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
@@ -95,10 +97,10 @@ class Experiment:
         trainset, valset, testset = self.prepare_datasets(max_values)
         self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
 
-        model = self._setup_autoencoder() if self.ae else self._setup_bias_variance_model(max_values)
+        model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
         model = train(model, self.trainloader, self.valloader, self.cfg)
 
-        modeller = model.encoder if self.ae else model.variance.modeller
+        modeller = model.variance.encoder if self.ae else model.variance.modeller
         if self.cfg.save_model:
             torch.save(modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}.pth")
 
