@@ -17,6 +17,8 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str) -> None:
     k = len(pixel_hats)
     fix_ref = CHANNELS // k
     intervals = [CHANNELS / (k + 2) * i for i in range(1, k + 1)]
+    hat_sum = np.zeros(150)
+
     for i, stats in enumerate(pixel_hats):
         stats = stats.cpu().detach().numpy()
         if mu_type == "unconstrained":
@@ -26,8 +28,11 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str) -> None:
         elif mu_type == "equal_interval":
             mu = intervals[i]
         sigma, scale = CHANNELS * stats[1], CHANNELS * stats[2]
-        dist = scale * norm.pdf(range(0, CHANNELS), mu, sigma) + shift
+        dist = scale * norm.pdf(range(0, CHANNELS), mu, sigma)
+        hat_sum += dist
         fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
+    
+    fig.add_traces(go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift}", line_color="black"))
     fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_hats": fig})
 
