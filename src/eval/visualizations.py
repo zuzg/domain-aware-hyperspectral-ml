@@ -32,7 +32,7 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str) -> None:
         hat_sum += dist
         fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
     
-    fig.add_traces(go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift}", line_color="black"))
+    fig.add_traces(go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black"))
     fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_hats": fig})
 

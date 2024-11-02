@@ -8,6 +8,7 @@ from torchmetrics.image import PeakSignalNoiseRatio
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
+from src.train.metrics import calculate_sam
 
 
 def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
@@ -26,26 +27,6 @@ def calculate_penalization(tensor: Tensor, device: str) -> Tensor:
     # average over all pixels and batch size
     result = result.sum() / (n * h * w)
     return result
-
-
-def dim_zero_cat(x: Tensor) -> Tensor:
-    """Concatenation along the zero dimension."""
-    x = x if isinstance(x, (list, tuple)) else [x]
-    x = [y.unsqueeze(0) if y.numel() == 1 and y.ndim == 0 else y for y in x]
-    if not x:  # empty list
-        raise ValueError("No samples to concatenate")
-    return torch.cat(x, dim=0)
-
-
-def calculate_sam(preds: Tensor, target: Tensor) -> float:
-    preds = dim_zero_cat(preds)
-    target = dim_zero_cat(target)
-
-    dot_product = (preds * target).sum(dim=1)
-    preds_norm = preds.norm(dim=1)
-    target_norm = target.norm(dim=1)
-    sam_score = torch.clamp(dot_product / (preds_norm * target_norm), -1, 1).acos()
-    return sam_score.nanmean()
 
 
 def pretrain(
@@ -76,68 +57,86 @@ def pretrain(
     return bias_model
 
 
-def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg) -> nn.Module:
-    criterion = nn.MSELoss(reduction="sum")  # Summing loss over all elements
-    psnr = PeakSignalNoiseRatio().to(cfg.device)
+def compute_loss(criterion: nn.Module, pred: Tensor, target: Tensor, mask: Tensor) -> nn.Module:
+    """Compute masked loss normalized by the number of unmasked elements."""
+    masked_pred = pred[mask]
+    masked_target = target[mask]
+    loss = criterion(masked_pred, masked_target) / mask.sum().item()
+    return loss
+
+
+def train_step(
+    model: nn.Module,
+    dataloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: str,
+    epoch: int,
+) -> float:
+    """Run a single training step over the trainloader."""
+    model.train()
+    step_losses = []
+
+    for batch in tqdm(dataloader, unit="batch", desc=f"Epoch {epoch}"):
+        optimizer.zero_grad()
+        batch = batch.to(device)
+        mask = batch != 0
+        pred = model(batch)
+
+        loss = compute_loss(criterion, pred, batch, mask)
+        loss.backward()
+        optimizer.step()
+        step_losses.append(loss.item())
+
+    return np.mean(step_losses)
+
+
+def validate_step(
+    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, psnr: nn.Module, device: str
+) -> tuple[float]:
+    """Run a validation step over the valloader and compute metrics."""
+    model.eval()
+    running_loss = running_psnr = running_sam = 0.0
+
+    with torch.no_grad():
+        for batch in dataloader:
+            batch = batch.to(device)
+            mask = batch != 0
+            pred = model(batch)
+
+            loss = compute_loss(criterion, pred, batch, mask)
+            pred[batch == 0] = 0  # Ignore masked pixels for metrics
+            psnr_val = psnr(pred, batch)
+            sam_val = calculate_sam(pred, batch)
+
+            running_loss += loss.item()
+            running_psnr += psnr_val
+            running_sam += sam_val
+
+    num_batches = len(dataloader)
+    avg_loss = running_loss / num_batches
+    avg_psnr = running_psnr / num_batches
+    avg_sam = running_sam / num_batches
+    return avg_loss, avg_psnr, avg_sam
+
+
+def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
+    """Train the model with given configurations."""
+    criterion = nn.MSELoss(reduction="sum")
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+    psnr = PeakSignalNoiseRatio().to(cfg.device)
 
     for epoch in range(cfg.epochs):
-        model.train()
-        step_losses = []
-        with tqdm(trainloader, unit="batch") as tepoch:
-            for input in tepoch:
-                tepoch.set_description(f"Epoch {epoch}")
-                optimizer.zero_grad()
-                input = input.to(cfg.device)
-                mask = input != 0  # True where input is non-zero
-                div = mask.sum().item()  # Count of non-masked values
-
-                y_pred = model(input)
-
-                # Apply mask to both input and y_pred
-                masked_y_pred = y_pred[mask]
-                masked_input = input[mask]
-
-                loss = criterion(masked_y_pred, masked_input) / div
-                loss.backward()
-                optimizer.step()
-
-                tepoch.set_postfix(loss=loss.item())
-                step_losses.append(loss.item())
-
-        model.eval()
-        running_vloss = 0.0
-        running_psnr = 0.0
-        running_sam = 0.0
-        with torch.no_grad():
-            for i, vdata in enumerate(valloader):
-                vinputs = vdata.to(cfg.device)
-                mask = vinputs != 0
-                vdiv = mask.sum().item()
-                voutputs = model(vinputs)
-
-                # Apply mask
-                masked_voutputs = voutputs[mask]
-                masked_vinputs = vinputs[mask]
-
-                vloss = criterion(masked_voutputs, masked_vinputs) / vdiv
-
-                voutputs[vinputs == 0] = 0
-                vpsnr = psnr(voutputs, vinputs)
-                vsam = calculate_sam(voutputs, vinputs)
-
-                running_vloss += vloss.item()
-                running_psnr += vpsnr
-                running_sam += vsam
-
+        train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
+        val_loss, val_psnr, val_sam = validate_step(model, valloader, criterion, psnr, cfg.device)
         if cfg.wandb:
             wandb.log(
                 {
-                    "metrics/train/MSE": np.mean(step_losses),
-                    "metrics/val/MSE": running_vloss / (i + 1),
-                    "metrics/val/PSNR": running_psnr / (i + 1),
-                    "metrics/val/SAM": running_sam / (i + 1),
+                    "metrics/train/MSE": train_loss,
+                    "metrics/val/MSE": val_loss,
+                    "metrics/val/PSNR": val_psnr,
+                    "metrics/val/SAM": val_sam,
                 }
             )
         scheduler.step()
