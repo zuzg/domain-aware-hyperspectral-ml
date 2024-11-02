@@ -25,7 +25,7 @@ class Decoder(nn.Module):
         self.deconv1 = nn.Conv2d(num_params * k, 64, kernel_size=1)
         self.deconv2 = nn.Conv2d(64, 64, kernel_size=1)
         self.deconv3 = nn.Conv2d(64, channels, kernel_size=1)
-        self.output_activation = nn.Sigmoid()
+        self.output_activation = nn.Tanh()
         self.float()
 
     def forward(self, x: Tensor) -> Tensor:
