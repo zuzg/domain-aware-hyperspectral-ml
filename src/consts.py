@@ -32,3 +32,9 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
     "Autoencoder": RendererConfig(Autoencoder, 3),
     "None": RendererConfig(None, 0),
 }
+
+# soil baselines
+MSE_BASE_K: int = 2500
+MSE_BASE_P: int = 1100
+MSE_BASE_MG: int = 2000
+MSE_BASE_PH: int = 3

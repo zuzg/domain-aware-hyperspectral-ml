@@ -25,7 +25,7 @@ class Evaluator:
 
     def _initialize_model_components(self) -> tuple[nn.Module | None]:
         if self.ae:
-            return self.model, None, None
+            return self.model, None, self.model.bias
         return self.model.variance.modeller, self.model.variance, self.model.bias
 
     def evaluate(self, testloader: DataLoader) -> None:
@@ -84,7 +84,6 @@ class Evaluator:
             plot_splines(self.variance_model.renderer(center_slice)[idx])
 
     def _plot_bias(self) -> None:
-        if self.ae or self.bias_model is None:
-            return
-        bias = self.bias_model if self.cfg.bias_renderer == "Mean" else self.bias_model(0)
-        plot_bias(bias[0, :, 0, 0])
+        if self.bias_model is not None:
+            bias = self.bias_model if self.cfg.bias_renderer == "Mean" else self.bias_model(0)
+            plot_bias(bias[0, :, 0, 0])
