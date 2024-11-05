@@ -1,90 +1,53 @@
 import numpy as np
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objs as go
-from plotly.subplots import make_subplots
+import torch
 import wandb
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
-from sklearn.multioutput import MultiOutputRegressor
-from sklearn.neural_network import MLPRegressor
-from torch.utils.data import DataLoader, Dataset
-from xgboost import XGBRegressor
+from torch import nn, Tensor
+from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from tqdm import tqdm
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, GT_PATH, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH
+from src.consts import CHANNELS, GT_DIM, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH
 from src.models.modeller import Modeller
+from src.soil_params.data import prepare_datasets, prepare_gt, SoilDataset
 
 
-def prepare_datasets(
-    dataset: Dataset,
-    model: Modeller,
-    k: int,
-    num_params: int,
-    batch_size: int,
-    channels: int,
-    device: str,
-    ae: bool,
-) -> tuple[np.ndarray]:
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
-    imgs = []
-    preds = []
-
-    for data in dataloader:
-        data = data.to(device)
-        pred = model(data)
-        data = data.cpu().detach().numpy()
-        pred = pred.cpu().detach().numpy()
-        # last param is shift - take it only once for all hats
-        if not ae:
-            shift = pred[:, 0, num_params - 1 :]
-            pred[:, :, num_params - 1] = shift
-        mask = data[:, 0] == 0
-
-        expanded_mask = np.expand_dims(mask, axis=1)
-        crop_mask = np.repeat(expanded_mask, repeats=CHANNELS, axis=1)
-        masked_data = np.where(crop_mask == 0, data, np.nan)
-        data_mean = np.nanmean(masked_data, axis=(2, 3))
-
-        if not ae:
-            expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
-            crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
-            masked_pred = np.where(crop_mask == 0, pred, np.nan)
-            pred_mean = np.nanmean(masked_pred, axis=(3, 4))
-        else:
-            expanded_mask = np.expand_dims(mask, axis=1)
-            crop_mask = np.repeat(expanded_mask, repeats=k * num_params, axis=1)
-            masked_data = np.where(crop_mask == 0, pred, np.nan)
-            pred_mean = np.nanmean(masked_data, axis=(2, 3))
-        imgs.append(data_mean)
-        preds.append(pred_mean)
-
-    imgs = np.array(imgs)
-    preds = np.array(preds)
-    img_means = imgs.reshape(imgs.shape[0] * batch_size, channels)
-    pred_means = preds.reshape(preds.shape[0] * batch_size, k * num_params)
-    return img_means, pred_means
+def compute_masks(img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor) -> tuple[Tensor]:
+    expanded_mask = mask.unsqueeze(1)
+    crop_mask = expanded_mask.expand(-1, gt.shape[1], -1, -1)
+    masked_gt = torch.where(crop_mask == 0, gt, torch.zeros_like(gt))
+    masked_pred = torch.where(crop_mask == 0, img, torch.zeros_like(img))
+    return masked_gt * gt_div_tensor, masked_pred * gt_div_tensor
 
 
-def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
-    gt = pd.read_csv(GT_PATH)
-    gt = gt.loc[gt["sample_index"].isin(ids)]
-    gt = gt.drop(["sample_index"], axis=1)
-    return gt
+def predict_params(
+    trainloader: DataLoader, testloader: DataLoader, f_dim: int, gt_div: np.ndarray, device: str
+) -> np.ndarray:
+    model = train(trainloader, features=f_dim)
+    model.to(device)
+    model.eval()
+    criterion = nn.MSELoss(reduction="none")
+    total_loss = torch.zeros(GT_DIM, device=device)
+    gt_div_tensor = torch.tensor(gt_div, device=device).reshape(1, GT_DIM, 1, 1)
 
+    with torch.no_grad():
+        for img, gt in testloader:
+            img, gt = img.to(device), gt.to(device)
+            mask = img[:, 0] == 0
+            div = (img[:, 0] != 0).sum().item()  # Count of non-zero elements in channel 0
 
-def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray) -> np.ndarray:
-    model = MultiOutputRegressor(XGBRegressor(n_estimators=100, learning_rate=1e-3))
-    # model = MultiOutputRegressor(MLPRegressor(max_iter=1000))
-    model.fit(x_train, y_train)
-    preds = model.predict(x_test)
-    mse = mean_squared_error(y_test, preds, multioutput="raw_values")
-    return mse
+            pred = model(img)
+            masked_gt, masked_pred = compute_masks(pred, gt, mask, gt_div_tensor)
+
+            loss = criterion(masked_pred, masked_gt)
+            channel_loss = loss.sum(dim=(0, 2, 3)) / div  # Summing across height and width
+            total_loss += channel_loss
+
+    mean_loss = total_loss / len(testloader)
+    return mean_loss.cpu().detach().numpy()
 
 
 def samples_number_experiment(
-    x: np.ndarray, y: np.ndarray, sample_nums: list[int], n_runs: int = 10
-) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    dataset: Dataset, sample_nums: list[int], gt_div: np.ndarray, f_dim: int, n_runs: int = 5) -> None:
     mses_mean = []
     mses_std = []
     wandb.define_metric("soil/step")
@@ -92,14 +55,16 @@ def samples_number_experiment(
 
     for sn in sample_nums:
         mses_for_sample = []
-
         for run in range(n_runs):
-            x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
-            x_train, y_train = x_train_base[:sn], y_train_base[:sn]
+            generator = torch.Generator().manual_seed(run)
+            trainset_base, testset = random_split(dataset, [0.8, 0.2], generator=generator)
+            trainset = Subset(trainset_base, indices=range(sn))
+            trainloader = DataLoader(trainset, batch_size=8, shuffle=True)
+            testloader = DataLoader(testset, batch_size=8, shuffle=False)
 
-            mse = predict_params(x_train, x_test, y_train, y_test)
+            mse = predict_params(trainloader, testloader, f_dim, gt_div, "cuda")
             mses_for_sample.append(mse / [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH])
-
+        
         mses_for_sample = np.array(mses_for_sample)
         mses_sample_mean = mses_for_sample.mean(axis=0)
         mses_mean.append(mses_sample_mean)
@@ -114,74 +79,58 @@ def samples_number_experiment(
                 "soil/score": 0.25 * np.sum(mses_sample_mean),
             }
         )
-    return np.array(mses_mean), np.array(mses_std)
 
 
-def plot_soil_params(
-    samples: list[int],
-    mean_img: np.ndarray,
-    std_img: np.ndarray,
-    mean_pred: np.ndarray,
-    std_pred: np.ndarray,
-    gt: pd.DataFrame,
-    k: int,
-    num_params: int,
-) -> None:
-    fig = make_subplots(rows=2, cols=2, subplot_titles=gt.columns)
-    x = list(range(len(samples)))
-    means = [mean_img, mean_pred]
-    stds = [std_img, std_pred]
-    palette = px.colors.qualitative.Plotly
-    names = ["Raw-150", f"ModG-{k*num_params-k+1}"]  # TODO Latent-n
-    colors = [palette[i % len(palette)] for i in range(2)]
+class MultiRegressionCNN(nn.Module):
+    def __init__(self, input_channels: int, output_channels: int = GT_DIM):
+        """
+        CNN for hyperspectral image regression, outputting n continuous values per pixel.
+        """
+        super().__init__()
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(input_channels, 64, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 128, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 64, kernel_size=1),
+            nn.Sigmoid(),
+        )
+        self.output_layer = nn.Conv2d(64, output_channels, kernel_size=1)
 
-    for i in range(4):
-        row = i // 2 + 1
-        col = i % 2 + 1
-        for j in range(2):
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=means[j][:, i],
-                    mode="lines",
-                    line=dict(color=colors[j]),
-                    name=names[j],
-                    showlegend=i == 0,
-                ),
-                row=row,
-                col=col,
-            )
-            fig.add_trace(
-                go.Scatter(
-                    name="-std",
-                    x=x,
-                    y=means[j][:, i] - stds[j][:, i],
-                    opacity=0.4,
-                    marker=dict(color=colors[j]),
-                    mode="lines",
-                    showlegend=False,
-                ),
-                row=row,
-                col=col,
-            )
-            fig.add_trace(
-                go.Scatter(
-                    name="+std",
-                    x=x,
-                    y=means[j][:, i] + stds[j][:, i],
-                    opacity=0.4,
-                    marker=dict(color=colors[j]),
-                    mode="lines",
-                    showlegend=False,
-                ),
-                row=row,
-                col=col,
-            )
-        fig.update_xaxes(title_text="Number of samples", tickvals=x, ticktext=samples, row=row, col=col)
-        fig.update_yaxes(title_text="MSE", row=row, col=col)
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.conv_layers(x)
+        output = self.output_layer(x)
+        return output
 
-    fig.update_layout(title_text="MLP: mean and std of MSE for each predicted soil parameter", showlegend=True, hovermode="x")
-    wandb.log({"soil_params": fig})
+
+def train(dataloader: DataLoader, features: int = 150, epochs: int = 20) -> nn.Module:
+    model = MultiRegressionCNN(input_channels=features)
+    model = model.to("cuda")
+    criterion = nn.MSELoss(reduction="sum")
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    for epoch in range(epochs):
+        with tqdm(dataloader, unit="batch", desc=f"Epoch {epoch}") as tepoch:
+            for images, gt in tepoch:
+                images, gt = images.to("cuda"), gt.to("cuda")
+                optimizer.zero_grad()
+                mask = (images != 0).any(dim=1).unsqueeze(1)
+                non_zero_count = mask.sum().item()
+
+                outputs = model(images)
+
+                masked_outputs = outputs[mask.expand_as(outputs)]
+                masked_gt = gt[mask.expand_as(gt)]
+                loss = criterion(masked_outputs, masked_gt) / non_zero_count
+                loss.backward()
+                optimizer.step()
+
+                tepoch.set_postfix(loss=loss.item())
+    return model
 
 
 def predict_soil_parameters(
@@ -190,12 +139,12 @@ def predict_soil_parameters(
     num_params: int,
     cfg: ExperimentConfig,
     ae: bool,
+    baseline: bool = False,
 ) -> None:
-    imgs_agg, preds_agg = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, CHANNELS, cfg.device, ae)
+    features = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, cfg.device, ae, baseline)
     gt = prepare_gt(dataset.ids)
-    samples = [500, 250, 200, 150, 100, 50, 25, 10]
-
-    # mses_mean_img, mses_std_img = samples_number_experiment(imgs_agg, gt, samples)
-    mses_mean_pred, mses_std_pred = samples_number_experiment(preds_agg, gt, samples)
-
-    # plot_soil_params(samples, mses_mean_img, mses_std_img, mses_mean_pred, mses_std_pred, gt, cfg.k, num_params)
+    gt_div = gt.max().values
+    dataset = SoilDataset(features, cfg.img_size, gt, gt_div)
+    samples = [487, 250, 200, 150, 100, 50, 25, 10]
+    f_dim = CHANNELS if baseline else cfg.k * num_params
+    samples_number_experiment(dataset, samples, gt_div, f_dim)

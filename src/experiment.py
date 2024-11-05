@@ -12,7 +12,7 @@ from src.eval.eval_loop import Evaluator
 from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 from src.models.modeller import Modeller
-from src.soil_params.pred import predict_soil_parameters
+from soil_params.pred import predict_soil_parameters
 from src.train.train_loop import pretrain, train
 
 
@@ -28,7 +28,7 @@ class Experiment:
         if self.ae:
             return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
         return f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}", [
-            f"μ: {self.cfg.mu_type}"
+            f"μ: {self.cfg.mu_type}", "MLP"
         ]
 
     def _initialize_wandb(self) -> None:

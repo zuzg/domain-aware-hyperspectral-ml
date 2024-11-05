@@ -33,7 +33,8 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
     "None": RendererConfig(None, 0),
 }
 
-# soil baselines
+# soil
+GT_DIM: int = 4
 MSE_BASE_K: int = 2500
 MSE_BASE_P: int = 1100
 MSE_BASE_MG: int = 2000

@@ -1,6 +1,4 @@
-import numpy as np
-import torch
-from torch import Tensor
+from torch import nn, Tensor
 
 from src.models.renderers.base_renderer import BaseRenderer
 
@@ -16,4 +14,4 @@ class SplineRenderer(BaseRenderer):
 
     def generate_spline(self, points: Tensor) -> Tensor:
         points = points.permute(0, 2, 1, 3)
-        return torch.nn.functional.interpolate(input=points, size=[self.channels, points.shape[-1]], mode="bicubic")
+        return nn.functional.interpolate(input=points, size=[self.channels, points.shape[-1]], mode="bicubic")

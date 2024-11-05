@@ -1,6 +1,5 @@
 import torch
-import torch.nn as nn
-from torch import Tensor
+from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
 from src.config import ExperimentConfig

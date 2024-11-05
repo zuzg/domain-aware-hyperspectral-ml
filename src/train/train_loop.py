@@ -1,8 +1,7 @@
 import numpy as np
 import torch
-import torch.nn as nn
 import wandb
-from torch import Tensor
+from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from torchmetrics.image import PeakSignalNoiseRatio
 from tqdm import tqdm

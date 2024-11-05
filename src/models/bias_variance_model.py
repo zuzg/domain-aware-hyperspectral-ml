@@ -1,7 +1,6 @@
 import numpy as np
 import torch
-import torch.nn as nn
-from torch import Tensor
+from torch import nn, Tensor
 
 from src.models.modeller import Modeller
 from src.models.renderers.base_renderer import BaseRenderer
