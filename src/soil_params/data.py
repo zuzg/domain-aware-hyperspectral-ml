@@ -33,11 +33,12 @@ def prepare_datasets(
     num_params: int,
     batch_size: int,
     device: str,
-    ae: bool,
-    baseline: bool,
+    ae: bool = False,
+    baseline: bool = False,
 ) -> np.ndarray:
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     features = []
+    model.eval()
     for data in dataloader:
         mask = data[:, 0] == 0
         if baseline:

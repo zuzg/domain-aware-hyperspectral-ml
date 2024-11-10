@@ -6,9 +6,10 @@ from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, GT_DIM, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH
+from src.consts import CHANNELS, GT_DIM, GT_MAX, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH, OUTPUT_PATH
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets, prepare_gt, SoilDataset
+from src.soil_params.visualizations import visualize_distribution
 
 
 def compute_masks(img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor) -> tuple[Tensor]:
@@ -20,9 +21,11 @@ def compute_masks(img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor) 
 
 
 def predict_params(
-    trainloader: DataLoader, testloader: DataLoader, f_dim: int, gt_div: np.ndarray, device: str
+    trainloader: DataLoader, testloader: DataLoader, f_dim: int, gt_div: np.ndarray, device: str, save_model: bool
 ) -> np.ndarray:
     model = train(trainloader, features=f_dim)
+    if save_model:
+        torch.save(model.state_dict(), OUTPUT_PATH / f"regressor.pth")
     model.to(device)
     model.eval()
     criterion = nn.MSELoss(reduction="none")
@@ -38,6 +41,7 @@ def predict_params(
             pred = model(img)
             masked_gt, masked_pred = compute_masks(pred, gt, mask, gt_div_tensor)
 
+            # TODO average first!
             loss = criterion(masked_pred, masked_gt)
             channel_loss = loss.sum(dim=(0, 2, 3)) / div  # Summing across height and width
             total_loss += channel_loss
@@ -52,17 +56,22 @@ def samples_number_experiment(
     mses_std = []
     wandb.define_metric("soil/step")
     wandb.define_metric("soil/*", step_metric="soil/step")
+    save_model = True
 
     for sn in sample_nums:
         mses_for_sample = []
         for run in range(n_runs):
             generator = torch.Generator().manual_seed(run)
             trainset_base, testset = random_split(dataset, [0.8, 0.2], generator=generator)
+            # if sn == sample_nums[0]:
+            #     visualize_distribution(trainset_base, testset, run)
+
             trainset = Subset(trainset_base, indices=range(sn))
             trainloader = DataLoader(trainset, batch_size=8, shuffle=True)
             testloader = DataLoader(testset, batch_size=8, shuffle=False)
 
-            mse = predict_params(trainloader, testloader, f_dim, gt_div, "cuda")
+            mse = predict_params(trainloader, testloader, f_dim, gt_div, "cuda", save_model)
+            save_model = False
             mses_for_sample.append(mse / [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH])
         
         mses_for_sample = np.array(mses_for_sample)
@@ -143,8 +152,7 @@ def predict_soil_parameters(
 ) -> None:
     features = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, cfg.device, ae, baseline)
     gt = prepare_gt(dataset.ids)
-    gt_div = gt.max().values
-    dataset = SoilDataset(features, cfg.img_size, gt, gt_div)
+    dataset = SoilDataset(features, cfg.img_size, gt, GT_MAX)
     samples = [487, 250, 200, 150, 100, 50, 25, 10]
     f_dim = CHANNELS if baseline else cfg.k * num_params
-    samples_number_experiment(dataset, samples, gt_div, f_dim)
+    samples_number_experiment(dataset, samples, GT_MAX, f_dim)

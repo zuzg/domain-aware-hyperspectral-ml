@@ -1,9 +1,39 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
-from plotly.subplots import make_subplots
 import wandb
+from plotly.subplots import make_subplots
+from torch.utils.data import Dataset
+
+from src.consts import GT_NAMES
+
+
+def gt_to_lists(dataset: Dataset) -> tuple[list]:
+    ps, ks, mgs, phs, = [], [], [], []
+    for (img, gt) in dataset:
+        pixel = gt[:, 0, 0]
+        p, k, mg, ph = pixel[0], pixel[1], pixel[2], pixel[3]
+        ps.append(p)
+        ks.append(k)
+        mgs.append(mg)
+        phs.append(ph)
+    return ps, ks, mgs, phs
+
+
+def visualize_distribution(trainset: Dataset, testset: Dataset, run: int) -> None:
+    train_params = gt_to_lists(trainset)
+    test_params = gt_to_lists(testset)
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    kwargs = dict(alpha=0.5, bins=100)
+    for i, ax in enumerate(fig.axes):
+        ax.hist(train_params[i], **kwargs, label="Train set")
+        ax.hist(test_params[i], **kwargs, label="Test set")
+        ax.legend()
+        ax.set_title(GT_NAMES[i])
+    fig.suptitle("Distribution of targets")
+    plt.savefig(f"output/hists_{run}.png")
 
 
 def plot_soil_params(

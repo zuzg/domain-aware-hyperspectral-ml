@@ -20,6 +20,7 @@ STD_PATH: Path = STATS_PATH / "std_c.npy"
 
 # data
 TRAIN_IDS: list[int] = list(range(1732))
+TEST_IDS: list[int] = list(range(1154))
 SPLIT_RATIO: list[int] = [1000, 124, 608]
 CHANNELS: int = 150
 
@@ -35,6 +36,8 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
 
 # soil
 GT_DIM: int = 4
+GT_NAMES: list[str] = ["P", "K", "Mg", "pH"]
+GT_MAX: list[float] = [325.0, 625.0, 400.0, 7.8]
 MSE_BASE_K: int = 2500
 MSE_BASE_P: int = 1100
 MSE_BASE_MG: int = 2000
