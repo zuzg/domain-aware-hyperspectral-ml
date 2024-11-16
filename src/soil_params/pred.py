@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, GT_DIM, GT_MAX, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH, OUTPUT_PATH
+from src.consts import CHANNELS, GT_DIM, GT_MAX, GT_NAMES, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH, OUTPUT_PATH
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets, prepare_gt, SoilDataset
 from src.soil_params.visualizations import visualize_distribution
@@ -23,14 +23,14 @@ def compute_masks(img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor) 
 def predict_params(
     trainloader: DataLoader, testloader: DataLoader, f_dim: int, gt_div: np.ndarray, device: str, save_model: bool
 ) -> np.ndarray:
-    model = train(trainloader, features=f_dim)
+    model = train(trainloader, features=f_dim, out_dim=len(gt_div))
     if save_model:
         torch.save(model.state_dict(), OUTPUT_PATH / f"regressor.pth")
     model.to(device)
     model.eval()
     criterion = nn.MSELoss(reduction="none")
-    total_loss = torch.zeros(GT_DIM, device=device)
-    gt_div_tensor = torch.tensor(gt_div, device=device).reshape(1, GT_DIM, 1, 1)
+    total_loss = torch.zeros(len(gt_div), device=device)
+    gt_div_tensor = torch.tensor(gt_div, device=device).reshape(1, len(gt_div), 1, 1)
 
     with torch.no_grad():
         for img, gt in testloader:
@@ -51,9 +51,15 @@ def predict_params(
 
 
 def samples_number_experiment(
-    dataset: Dataset, sample_nums: list[int], gt_div: np.ndarray, f_dim: int, n_runs: int = 5) -> None:
+    dataset: Dataset,
+    sample_nums: list[int],
+    gt_div: np.ndarray,
+    f_dim: int,
+    mse_base: float | list[float],
+    param: str | None = None,
+    n_runs: int = 5,
+) -> None:
     mses_mean = []
-    mses_std = []
     wandb.define_metric("soil/step")
     wandb.define_metric("soil/*", step_metric="soil/step")
     save_model = True
@@ -61,6 +67,7 @@ def samples_number_experiment(
     for sn in sample_nums:
         mses_for_sample = []
         for run in range(n_runs):
+            print(run)
             generator = torch.Generator().manual_seed(run)
             trainset_base, testset = random_split(dataset, [0.8, 0.2], generator=generator)
             # if sn == sample_nums[0]:
@@ -71,23 +78,31 @@ def samples_number_experiment(
             testloader = DataLoader(testset, batch_size=8, shuffle=False)
 
             mse = predict_params(trainloader, testloader, f_dim, gt_div, "cuda", save_model)
+            print(mse)
             save_model = False
-            mses_for_sample.append(mse / [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH])
-        
+            mses_for_sample.append(mse / mse_base)
+
         mses_for_sample = np.array(mses_for_sample)
         mses_sample_mean = mses_for_sample.mean(axis=0)
         mses_mean.append(mses_sample_mean)
-        mses_std.append(mses_for_sample.std(axis=0))
-        wandb.log(
-            {
-                "soil/step": -sn,
-                "soil/P": mses_sample_mean[0],
-                "soil/K": mses_sample_mean[1],
-                "soil/Mg": mses_sample_mean[2],
-                "soil/pH": mses_sample_mean[3],
-                "soil/score": 0.25 * np.sum(mses_sample_mean),
-            }
-        )
+        if len(gt_div) == 1:
+            wandb.log(
+                {
+                    "soil/step": -sn,
+                    f"soil/{param}": mses_sample_mean[0],
+                }
+            )
+        else:
+            wandb.log(
+                {
+                    "soil/step": -sn,
+                    "soil/P": mses_sample_mean[0],
+                    "soil/K": mses_sample_mean[1],
+                    "soil/Mg": mses_sample_mean[2],
+                    "soil/pH": mses_sample_mean[3],
+                    "soil/score": 0.25 * np.sum(mses_sample_mean),
+                }
+            )
 
 
 class MultiRegressionCNN(nn.Module):
@@ -99,10 +114,13 @@ class MultiRegressionCNN(nn.Module):
         self.conv_layers = nn.Sequential(
             nn.Conv2d(input_channels, 64, kernel_size=1),
             nn.ReLU(),
+            nn.BatchNorm2d(64),
             nn.Conv2d(64, 128, kernel_size=1),
             nn.ReLU(),
+            nn.BatchNorm2d(128),
             nn.Conv2d(128, 256, kernel_size=1),
             nn.ReLU(),
+            nn.BatchNorm2d(256),
             nn.Conv2d(256, 128, kernel_size=1),
             nn.ReLU(),
             nn.Conv2d(128, 64, kernel_size=1),
@@ -116,11 +134,11 @@ class MultiRegressionCNN(nn.Module):
         return output
 
 
-def train(dataloader: DataLoader, features: int = 150, epochs: int = 20) -> nn.Module:
-    model = MultiRegressionCNN(input_channels=features)
+def train(dataloader: DataLoader, features: int = 150, out_dim: int = GT_DIM, epochs: int = 15) -> nn.Module:
+    model = MultiRegressionCNN(input_channels=features, output_channels=out_dim)
     model = model.to("cuda")
     criterion = nn.MSELoss(reduction="sum")
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     for epoch in range(epochs):
         with tqdm(dataloader, unit="batch", desc=f"Epoch {epoch}") as tepoch:
@@ -137,7 +155,6 @@ def train(dataloader: DataLoader, features: int = 150, epochs: int = 20) -> nn.M
                 loss = criterion(masked_outputs, masked_gt) / non_zero_count
                 loss.backward()
                 optimizer.step()
-
                 tepoch.set_postfix(loss=loss.item())
     return model
 
@@ -148,11 +165,21 @@ def predict_soil_parameters(
     num_params: int,
     cfg: ExperimentConfig,
     ae: bool,
+    single_model: bool = False,
     baseline: bool = False,
 ) -> None:
     features = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, cfg.device, ae, baseline)
     gt = prepare_gt(dataset.ids)
-    dataset = SoilDataset(features, cfg.img_size, gt, GT_MAX)
-    samples = [487, 250, 200, 150, 100, 50, 25, 10]
+    samples = [487]#, 250, 200, 150, 100, 50, 25, 10]
     f_dim = CHANNELS if baseline else cfg.k * num_params
-    samples_number_experiment(dataset, samples, GT_MAX, f_dim)
+    mse_base = [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH]
+
+    if single_model:
+        dataset = SoilDataset(features, cfg.img_size, gt, GT_MAX)
+        samples_number_experiment(dataset, samples, GT_MAX, f_dim, mse_base)
+    # train separate model for each parameter
+    else:
+        for i, soil_param in enumerate(GT_NAMES):
+            gt_param = gt.iloc[:, i]
+            dataset_param = SoilDataset(features, cfg.img_size, gt_param.to_frame(), GT_MAX[i])
+            samples_number_experiment(dataset_param, samples, np.array([GT_MAX[i]]), f_dim, mse_base[i], soil_param)

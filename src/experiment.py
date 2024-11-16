@@ -95,19 +95,24 @@ class Experiment:
 
         max_values = self._load_max_values()
         trainset, valset, testset = self.prepare_datasets(max_values)
-        self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
+        if not self.cfg.save_model:
+            modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, 4)
+            modeller.load_state_dict(torch.load(OUTPUT_PATH / f"modeller_{self.name}_10.pth"))
+            modeller = modeller.to(self.cfg.device)
+            predict_soil_parameters(testset, modeller, 4, self.cfg, self.ae)
+        
+        else:
+            self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
+            model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
+            model = train(model, self.trainloader, self.valloader, self.cfg)
 
-        model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
-        model = train(model, self.trainloader, self.valloader, self.cfg)
+            modeller = model.variance.encoder if self.ae else model.variance.modeller
+            torch.save(modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}_{self.cfg.epochs}.pth")
 
-        modeller = model.variance.encoder if self.ae else model.variance.modeller
-        if self.cfg.save_model:
-            torch.save(modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}.pth")
-
-        if self.cfg.wandb:
-            Evaluator(model, self.cfg, self.ae).evaluate(self.testloader)
-        if self.cfg.predict_soil:
-            predict_soil_parameters(
-                testset, modeller, self.num_params, self.cfg, self.ae
-            )
+            if self.cfg.wandb:
+                Evaluator(model, self.cfg, self.ae).evaluate(self.testloader)
+            if self.cfg.predict_soil:
+                predict_soil_parameters(
+                    testset, modeller, self.num_params, self.cfg, self.ae
+                )
         wandb.finish()
