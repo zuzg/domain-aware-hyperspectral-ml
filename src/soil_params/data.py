@@ -63,21 +63,54 @@ def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
     gt = gt.reset_index(drop=True)
     return gt
 
-
 class SoilDataset(Dataset):
-    def __init__(self, image_list: list[Tensor], size: int, gt: pd.DataFrame, gt_div: np.ndarray) -> None:
+    def __init__(
+        self, image_list: np.ndarray, size: int, gt: pd.DataFrame, gt_div: np.ndarray, shuffle: bool = True
+    ) -> None:
         super().__init__()
         self.size = size
-        self.images = image_list
+        self.images = torch.from_numpy(image_list)
         self.gt = gt
         self.gt_div = gt_div
+        self.gt_dim = len(gt_div)
+
+        if shuffle:
+            self.images, self.gt_values = self._shuffle_pixels_between_images()
+        else:
+            self.gt_values = self._prepare_gt_values()
 
     def __len__(self) -> int:
         return len(self.images)
 
-    def __getitem__(self, index: int) -> tuple[Tensor]:
-        image = self.images[index]
-        soil = torch.from_numpy(self.gt.loc[index].values / self.gt_div).float()
-        gt_unsqueezed = soil.unsqueeze(1).unsqueeze(2)
-        gt_repeated = gt_unsqueezed.repeat(1, self.size, self.size)
-        return image, gt_repeated
+    def __getitem__(self, index: int) -> tuple[torch.Tensor]:
+        return self.images[index], self.gt_values[index]
+
+    def _prepare_gt_values(self) -> torch.Tensor:
+        num_images = len(self.images)
+        gt_values = torch.zeros((num_images, self.gt_dim, self.size, self.size), dtype=torch.float32)
+
+        for i in range(num_images):
+            soil = torch.from_numpy(self.gt.loc[i].values / self.gt_div).float()
+            gt_unsqueezed = soil.unsqueeze(1).unsqueeze(2)
+            gt_values[i] = gt_unsqueezed.repeat(1, self.size, self.size)
+
+        return gt_values
+
+    def _shuffle_pixels_between_images(self) -> tuple[torch.Tensor, torch.Tensor]:
+        num_images, channels, height, width = self.images.shape
+        num_pixels = height * width
+
+        # Flatten images and ground truth tensors
+        flat_images = self.images.view(num_images, channels, num_pixels)
+        flat_gt = self._prepare_gt_values().view(num_images, self.gt_dim, num_pixels)
+
+        # Shuffle pixels across all images using random indices
+        shuffled_indices = torch.randperm(num_pixels)
+        shuffled_images = flat_images[:, :, shuffled_indices]
+        shuffled_gt = flat_gt[:, :, shuffled_indices]
+
+        # Reshape back to original dimensions
+        shuffled_images = shuffled_images.view(num_images, channels, height, width)
+        shuffled_gt = shuffled_gt.view(num_images, self.gt_dim, height, width)
+
+        return shuffled_images, shuffled_gt
