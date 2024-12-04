@@ -36,7 +36,7 @@ def prepare_datasets(
     ae: bool = False,
     baseline: bool = False,
 ) -> np.ndarray:
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True)
     features = []
     model.eval()
     for data in dataloader:
@@ -48,6 +48,8 @@ def prepare_datasets(
             pred = model(data)
             pred = pred.cpu().detach().numpy()
             data = data.cpu().detach().numpy()
+            shift = pred[:,0,num_params - 1:]
+            pred[:,:, num_params - 1] = shift
             masked_pred = apply_non_baseline_mask(pred, mask, k, num_params, ae)
         features.append(masked_pred)
 

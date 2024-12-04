@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import wandb
 from sklearn.metrics import mean_squared_error
@@ -7,35 +9,43 @@ from torch.utils.data import Dataset
 from xgboost import XGBRegressor
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH
+from src.consts import MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets, prepare_gt
 
 
-def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray) -> np.ndarray:
-    model = MultiOutputRegressor(XGBRegressor(n_estimators=100, learning_rate=1e-3))
+def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray, save_model: bool=False) -> np.ndarray:
+    model = MultiOutputRegressor(XGBRegressor(n_estimators=100, learning_rate=1e-2))
     model.fit(x_train, y_train)
+    if save_model:
+        with open("output/models/xgb_5.pickle", "wb") as f:
+            pickle.dump(model, f)
+
     preds = model.predict(x_test)
     mse = mean_squared_error(y_test, preds, multioutput="raw_values")
     return mse
 
 
 def samples_number_experiment(
-    x: np.ndarray, y: np.ndarray, sample_nums: list[int], n_runs: int = 10
+    x: np.ndarray, y: np.ndarray, sample_nums: list[int], n_runs: int = 1
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     mses_mean = []
     mses_std = []
     wandb.define_metric("soil/step")
     wandb.define_metric("soil/*", step_metric="soil/step")
+    save_model = True
 
     for sn in sample_nums:
         mses_for_sample = []
 
         for run in range(n_runs):
-            x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
-            x_train, y_train = x_train_base[:sn], y_train_base[:sn]
+            print(run)
+            # x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
+            # x_train, y_train = x_train_base[:sn], y_train_base[:sn]
 
-            mse = predict_params(x_train, x_test, y_train, y_test)
+            mse = predict_params(x, x, y, y, save_model)
+            save_model = False
+            print(mse)
             mses_for_sample.append(mse / [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH])
 
         mses_for_sample = np.array(mses_for_sample)
@@ -62,7 +72,9 @@ def predict_soil_parameters(
     cfg: ExperimentConfig,
     ae: bool,
 ) -> None:
-    imgs_agg, preds_agg = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, CHANNELS, cfg.device, ae)
+    preds = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, cfg.device, ae)
+    preds_agg = np.sum(preds, axis=(2, 3)) / np.count_nonzero(preds, axis=(2, 3))
     gt = prepare_gt(dataset.ids)
-    samples = [500, 250, 200, 150, 100, 50, 25, 10]
+    gt = gt[:1728]
+    samples  = [1728]# [500, 250, 200, 150, 100, 50, 25, 10]
     mses_mean_pred, mses_std_pred = samples_number_experiment(preds_agg, gt, samples)
