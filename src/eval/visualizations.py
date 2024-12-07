@@ -7,28 +7,26 @@ import wandb
 from scipy.stats import norm
 from torch import Tensor
 
-from src.consts import CHANNELS
 
-
-def plot_partial_hats(pixel_hats: Tensor, mu_type: str) -> None:
+def plot_partial_hats(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
     fig = go.Figure()
-    x = np.linspace(1, CHANNELS, num=CHANNELS)
+    x = np.linspace(1, channels, num=channels)
     shift = pixel_hats[0][3].cpu().detach().numpy()
     k = len(pixel_hats)
-    fix_ref = CHANNELS // k
-    intervals = [CHANNELS / (k + 2) * i for i in range(1, k + 1)]
-    hat_sum = np.zeros(150)
+    fix_ref = channels // k
+    intervals = [channels / (k + 2) * i for i in range(1, k + 1)]
+    hat_sum = np.zeros(channels)
 
     for i, stats in enumerate(pixel_hats):
         stats = stats.cpu().detach().numpy()
         if mu_type == "unconstrained":
-            mu = CHANNELS * stats[0]
+            mu = channels * stats[0]
         elif mu_type == "fixed_reference":
             mu = stats[0] * fix_ref + (fix_ref * i)
         elif mu_type == "equal_interval":
             mu = intervals[i]
-        sigma, scale = CHANNELS * stats[1], CHANNELS * stats[2]
-        dist = scale * norm.pdf(range(0, CHANNELS), mu, sigma)
+        sigma, scale = channels * stats[1], channels * stats[2]
+        dist = scale * norm.pdf(range(0, channels), mu, sigma)
         hat_sum += dist
         fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
     
@@ -37,9 +35,9 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str) -> None:
     wandb.log({"partial_hats": fig})
 
 
-def plot_partial_polynomials(polys: Tensor) -> None:
+def plot_partial_polynomials(polys: Tensor, channels: int) -> None:
     fig = go.Figure()
-    x = np.linspace(1, CHANNELS, num=150)
+    x = np.linspace(1, channels, num=channels)
     for i, params in enumerate(polys):
         params = params.cpu().detach().numpy()
         poly = params[0] * x ** params[1]
@@ -48,9 +46,9 @@ def plot_partial_polynomials(polys: Tensor) -> None:
     wandb.log({"partial_polys": fig})
 
 
-def plot_partial_polynomials_degree(polys: Tensor, k: int) -> None:
+def plot_partial_polynomials_degree(polys: Tensor, k: int, channels: int) -> None:
     fig = go.Figure()
-    x = np.linspace(1 / 100, CHANNELS / 100, num=150)
+    x = np.linspace(1 / 100, channels / 100, num=channels)
     exp = np.linspace(0, k-1, num=k)
     for i, params in enumerate(polys):
         params = params.cpu().detach().numpy()
@@ -69,11 +67,12 @@ def plot_splines(splines: Tensor) -> None:
     wandb.log({"splines": fig})
 
 
-def plot_images(gt_img: Tensor, pred_img: Tensor) -> None:
-    pred_img[gt_img == 0] = np.nan
-    gt_img[gt_img == 0] = np.nan
+def plot_images(gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
     cmap = matplotlib.colormaps.get_cmap(cmc.batlow)
-    cmap.set_bad("white")
+    if mask_nan:
+        pred_img[gt_img == 0] = np.nan
+        gt_img[gt_img == 0] = np.nan
+        cmap.set_bad("white")
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
     fig.suptitle("Band 0")
     axs[0].imshow(gt_img[0], cmap=cmap)

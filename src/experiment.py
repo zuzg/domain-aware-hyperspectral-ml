@@ -5,14 +5,14 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_IDS, TRAIN_PATH, RENDERERS_DICT
+from src.consts import DATA_PATH, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_IDS, TRAIN_PATH, RENDERERS_DICT
 from src.data.dataset import HyperviewDataset
-from src.data.preprocessing import mean_to_bias
+from src.data.preprocessing import mean_path_to_bias
 from src.eval.eval_loop import Evaluator
 from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 from src.models.modeller import Modeller
-from soil_params.pred import predict_soil_parameters
+from soil_params.pred_ml import predict_soil_parameters
 from src.train.train_loop import pretrain, train
 
 
@@ -44,7 +44,7 @@ class Experiment:
         return (
             HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
             HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
-            HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div),
+            HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
         )
 
     def prepare_dataloaders(
@@ -63,25 +63,25 @@ class Experiment:
 
     def _setup_autoencoder(self, div: np.ndarray) -> nn.Module:
         self.num_params = 3
-        variance_model =  Autoencoder(CHANNELS, self.cfg.k, self.num_params).to(self.cfg.device)
+        variance_model =  Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
         bias_model = self._prepare_bias_model(div)
         return BiasVarianceModel(bias_model, variance_model)
 
     def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
-        modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, self.num_params).to(self.cfg.device)
-        variance_model = VarianceModel(modeller, variance_renderer.model(self.cfg.device, CHANNELS, self.cfg.mu_type))
+        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        variance_model = VarianceModel(modeller, variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type))
         bias_model = self._prepare_bias_model(div)
         return BiasVarianceModel(bias_model, variance_model)
 
     def _prepare_bias_model(self, div: np.ndarray) -> nn.Module:
         if self.cfg.bias_renderer == "Mean":
-            return mean_to_bias(MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
+            return mean_path_to_bias(MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
 
         else:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
-            bias_renderer_model = bias_renderer.model(self.cfg.device, CHANNELS)
+            bias_renderer_model = bias_renderer.model(self.cfg.device, self.cfg.channels)
             bias_shape = (self.cfg.k, bias_renderer.num_params)
             bias_model = BiasModel(bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device)
 
@@ -92,22 +92,21 @@ class Experiment:
 
     def run(self) -> None:
         torch.manual_seed(42)
-
         max_values = self._load_max_values()
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
-            modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, 4)
-            modeller.load_state_dict(torch.load(OUTPUT_PATH / f"modeller_{self.name}_10.pth"))
+            modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
+            modeller.load_state_dict(torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_k=5_full_soill.pth"))
             modeller = modeller.to(self.cfg.device)
             predict_soil_parameters(testset, modeller, 4, self.cfg, self.ae)
-        
+
         else:
             self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
             model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
             model = train(model, self.trainloader, self.valloader, self.cfg)
 
             modeller = model.variance.encoder if self.ae else model.variance.modeller
-            torch.save(modeller.state_dict(), OUTPUT_PATH / f"modeller_{self.name}_{self.cfg.epochs}.pth")
+            torch.save(modeller.state_dict(), OUTPUT_PATH  / "models"/ f"modeller_{self.name}_{self.cfg.epochs}_k=5_full_soill.pth")
 
             if self.cfg.wandb:
                 Evaluator(model, self.cfg, self.ae).evaluate(self.testloader)

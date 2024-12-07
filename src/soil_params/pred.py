@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
-from src.consts import CHANNELS, GT_DIM, GT_MAX, GT_NAMES, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH, OUTPUT_PATH
+from src.consts import GT_DIM, GT_MAX, GT_NAMES, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH, OUTPUT_PATH
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets, prepare_gt, SoilDataset
 from src.soil_params.visualizations import visualize_distribution
@@ -28,7 +28,7 @@ def predict_params(
     else: param = None
     model = train(trainloader, features=f_dim, out_dim=len(gt_div), param=param)
     if save_model:
-        torch.save(model.state_dict(), OUTPUT_PATH / f"regressor_full_{gt_div[0]}.pth")
+        torch.save(model.state_dict(), OUTPUT_PATH / "models" / f"regressor_full_single.pth")
     model.to(device)
     model.eval()
     criterion = nn.MSELoss(reduction="none")
@@ -59,7 +59,7 @@ def samples_number_experiment(
     f_dim: int,
     mse_base: float | list[float],
     param: str | None = None,
-    n_runs: int = 5,
+    n_runs: int = 1,
 ) -> None:
     mses_mean = []
     wandb.define_metric("soil/step")
@@ -135,7 +135,7 @@ def train(dataloader: DataLoader, features: int = 150, out_dim: int = GT_DIM, ep
     model = MultiRegressionCNN(input_channels=features, output_channels=out_dim)
     model = model.to("cuda")
     criterion = nn.MSELoss(reduction="sum")
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     for epoch in range(epochs):
         with tqdm(dataloader, unit="batch", desc=f"Epoch {epoch}") as tepoch:
@@ -164,13 +164,13 @@ def predict_soil_parameters(
     num_params: int,
     cfg: ExperimentConfig,
     ae: bool,
-    single_model: bool = False,
+    single_model: bool = True,
     baseline: bool = False,
 ) -> None:
-    features = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, cfg.device, ae, baseline)
+    features = prepare_datasets(dataset, model, cfg.k, cfg.channels, num_params, cfg.batch_size, cfg.device, ae, baseline)
     gt = prepare_gt(dataset.ids)
-    samples = [487]  # , 250, 200, 150, 100, 50, 25, 10]
-    f_dim = CHANNELS if baseline else cfg.k * num_params
+    samples = [1728]  # , 250, 200, 150, 100, 50, 25, 10]
+    f_dim = cfg.channels if baseline else cfg.k * num_params
     mse_base = [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH]
 
     if single_model:

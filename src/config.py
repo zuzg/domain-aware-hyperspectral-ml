@@ -9,6 +9,7 @@ _mu_type = None | Literal["equal_interval", "fixed_reference", "unconstrained"]
 @dataclass
 class ExperimentConfig:
     img_size: int
+    channels: int
     max_val: int
     bias_renderer: str
     variance_renderer: str

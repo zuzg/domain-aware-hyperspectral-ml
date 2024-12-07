@@ -8,7 +8,7 @@ import torch
 from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from src.consts import CHANNELS, GT_DIM, GT_MAX, GT_NAMES, MAX_PATH, TEST_IDS
+from src.consts import GT_DIM, GT_MAX, GT_NAMES, MAX_PATH, TEST_IDS
 from src.data.dataset import HyperviewDataset
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets
@@ -22,6 +22,7 @@ class PredictionConfig:
     regressor_path: Path | str
     single_model: bool
     img_size: int
+    channels: int
     max_val: int
     k: int
     batch_size: int
@@ -32,11 +33,12 @@ def parse_args() -> PredictionConfig:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="data/hyperview/test_data")
     parser.add_argument(
-        "--modeller_path", type=str, default="output/modeller_var=GaussianRenderer_bias=Mean_k=5_20_test_train.pth"
+        "--modeller_path", type=str, default="output/modeller_var=GaussianRenderer_bias=Mean_k=5_20_k=5_full_soil.pth"
     )
-    parser.add_argument("--regressor_path", type=str, default="output/regressor_full.pth")
-    parser.add_argument("--single_model", type=bool, default=False)
+    parser.add_argument("--regressor_path", type=str, default="output/regressor_full_single.pth")
+    parser.add_argument("--single_model", type=bool, default=True)
     parser.add_argument("--img_size", type=int, default=100)
+    parser.add_argument("--channels", type=int, default=150)
     parser.add_argument("--max_val", type=int, default=6000)
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
@@ -93,7 +95,7 @@ class Prediction:
         self.cfg = cfg
 
     def run(self) -> None:
-        modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, 4)
+        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
         modeller.load_state_dict(torch.load(self.cfg.modeller_path))
         modeller.to(self.cfg.device)
 
@@ -123,7 +125,7 @@ class Prediction:
                 preds = predict_params(regressor, dataloader, [gt_max], self.cfg.device)
                 submission[gt_name] = preds
 
-        submission.to_csv("output/submission_single_small_lr.csv", index_label="sample_index")
+        submission.to_csv("output/submission_single_NEW_small_16.csv", index_label="sample_index")
 
 
 def main() -> None:

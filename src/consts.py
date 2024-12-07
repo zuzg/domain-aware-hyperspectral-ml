@@ -22,7 +22,6 @@ STD_PATH: Path = STATS_PATH / "std_c.npy"
 TRAIN_IDS: list[int] = list(range(1732))
 TEST_IDS: list[int] = list(range(1154))
 SPLIT_RATIO: list[int] = [1000, 124, 608]
-CHANNELS: int = 150
 
 # models
 RENDERERS_DICT: dict[str, RendererConfig] = {

@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
 
-from src.consts import CHANNELS, GT_DIM, GT_MAX, GT_NAMES, MAX_PATH, TEST_IDS
+from src.consts import GT_DIM, GT_NAMES, MAX_PATH, TEST_IDS
 from src.data.dataset import HyperviewDataset
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets
@@ -21,6 +21,7 @@ class PredictionConfig:
     regressor_path: Path | str
     single_model: bool
     img_size: int
+    channels: int
     max_val: int
     k: int
     batch_size: int
@@ -36,6 +37,7 @@ def parse_args() -> PredictionConfig:
     parser.add_argument("--regressor_path", type=str, default="output/models/xgb_5.pickle")
     parser.add_argument("--single_model", type=bool, default=True)
     parser.add_argument("--img_size", type=int, default=100)
+    parser.add_argument("--channels", type=int, default=150)
     parser.add_argument("--max_val", type=int, default=6000)
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
@@ -56,7 +58,7 @@ class Prediction:
         self.cfg = cfg
 
     def run(self) -> None:
-        modeller = Modeller(self.cfg.img_size, CHANNELS, self.cfg.k, 4)
+        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
         modeller.load_state_dict(torch.load(self.cfg.modeller_path))
         modeller.to(self.cfg.device)
 

@@ -1,10 +1,9 @@
 import numpy as np
 import pandas as pd
 import torch
-from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from src.consts import CHANNELS, GT_PATH
+from src.consts import GT_PATH
 from src.models.modeller import Modeller
 
 
@@ -30,6 +29,7 @@ def prepare_datasets(
     dataset: Dataset,
     model: Modeller,
     k: int,
+    channels: int,
     num_params: int,
     batch_size: int,
     device: str,
@@ -42,7 +42,7 @@ def prepare_datasets(
     for data in dataloader:
         mask = data[:, 0] == 0
         if baseline:
-            masked_pred = apply_baseline_mask(data, mask, CHANNELS)
+            masked_pred = apply_baseline_mask(data, mask, channels)
         else:
             data = data.to(device)
             pred = model(data)
@@ -54,7 +54,7 @@ def prepare_datasets(
         features.append(masked_pred)
 
     features = np.array(features)
-    f_dim = CHANNELS if baseline else k * num_params
+    f_dim = channels if baseline else k * num_params
     return features.reshape(features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1])
 
 

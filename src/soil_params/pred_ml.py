@@ -72,7 +72,7 @@ def predict_soil_parameters(
     cfg: ExperimentConfig,
     ae: bool,
 ) -> None:
-    preds = prepare_datasets(dataset, model, cfg.k, num_params, cfg.batch_size, cfg.device, ae)
+    preds = prepare_datasets(dataset, model, cfg.k, cfg.channels, num_params, cfg.batch_size, cfg.device, ae)
     preds_agg = np.sum(preds, axis=(2, 3)) / np.count_nonzero(preds, axis=(2, 3))
     gt = prepare_gt(dataset.ids)
     gt = gt[:1728]

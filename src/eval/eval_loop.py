@@ -55,14 +55,19 @@ class Evaluator:
         return rendered
 
     def _plot_results(self, imgs: list[Tensor], renders: list[Tensor], raw_outputs: list[Tensor]) -> None:
-        ids = [1, 8, 10]
+        if len(imgs) == 1:
+            ids = [0]
+            mask_nan = False
+        else:
+            ids = [1, 8, 10]
+            mask_nan = True
         for i in ids:
-            self._plot_image_comparisons(imgs[i][0].cpu(), renders[i][0].cpu())
+            self._plot_image_comparisons(imgs[i][0].cpu(), renders[i][0].cpu(), mask_nan)
             self._plot_variance_renderer(raw_outputs[i][0] if not self.ae else None, i)
         self._plot_bias()
 
-    def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor) -> None:
-        plot_images(gt_img.numpy(), pred_img.numpy())
+    def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
+        plot_images(gt_img.numpy(), pred_img.numpy(), mask_nan)
         plot_average_reflectance(gt_img.numpy(), pred_img.numpy())
         img_center = gt_img.shape[1] // 2
         plot_pixelwise(gt_img.numpy(), pred_img.numpy(), img_center)
@@ -74,11 +79,11 @@ class Evaluator:
         center_slice = raw_output[..., img_center, img_center]
         renderer_type = self.cfg.variance_renderer
         if renderer_type == "GaussianRenderer":
-            plot_partial_hats(center_slice, self.cfg.mu_type)
+            plot_partial_hats(center_slice, self.cfg.mu_type, self.cfg.channels)
         elif renderer_type == "PolynomialRenderer":
-            plot_partial_polynomials(center_slice)
+            plot_partial_polynomials(center_slice, self.cfg.channels)
         elif renderer_type == "PolynomialDegreeRenderer":
-            plot_partial_polynomials_degree(center_slice, self.cfg.k)
+            plot_partial_polynomials_degree(center_slice, self.cfg.k, self.cfg.channels)
         elif renderer_type == "SplineRenderer":
             plot_splines(self.variance_model.renderer(center_slice)[idx])
 
