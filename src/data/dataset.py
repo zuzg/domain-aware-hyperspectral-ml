@@ -37,3 +37,21 @@ class HyperviewDataset(Dataset):
                     img[img > self.max_val] = self.max_val  # clip outliers to max_val
                     image_list.append(torch.from_numpy(img).float())
         return image_list
+
+
+class HyperspectralScene(Dataset):
+    def __init__(self, img: np.ndarray, mean: float, std: float) -> None:
+        super().__init__()
+        self.img = self.prepare_arr(img)
+        self.transform = transforms.Normalize(mean, std)
+
+    def __len__(self) -> int:
+        return len(self.img)
+
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
+        image = self.transform(self.img)
+        return image
+
+    def prepare_arr(self, img: np.ndarray) -> Tensor:
+        img_r = img.transpose(2, 0, 1)
+        return torch.from_numpy(img_r.astype(np.float32))
