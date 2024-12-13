@@ -62,8 +62,8 @@ class Evaluator:
             ids = [1, 8, 10]
             mask_nan = True
         for i in ids:
-            self._plot_image_comparisons(imgs[i][0].cpu(), renders[i][0].cpu(), mask_nan)
-            self._plot_variance_renderer(raw_outputs[i][0] if not self.ae else None, i)
+            self._plot_image_comparisons(imgs[i][i].cpu(), renders[i][i].cpu(), mask_nan)
+            self._plot_variance_renderer(raw_outputs[i][i] if not self.ae else None, i)
         self._plot_bias()
 
     def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
