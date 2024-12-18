@@ -2,6 +2,7 @@ from pathlib import Path
 
 from src.config import RendererConfig
 from src.models.autoencoder import Autoencoder
+from src.models.renderers.beta_renderer import BetaRenderer
 from src.models.renderers.gaussian_renderer import GaussianRenderer
 from src.models.renderers.polynomial_degree_renderer import PolynomialDegreeRenderer
 from src.models.renderers.polynomial_renderer import PolynomialRenderer
@@ -25,6 +26,7 @@ SPLIT_RATIO: list[int] = [1000, 124, 608]
 
 # models
 RENDERERS_DICT: dict[str, RendererConfig] = {
+    "BetaRenderer": RendererConfig(BetaRenderer, 3),
     "GaussianRenderer": RendererConfig(GaussianRenderer, 4),
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),

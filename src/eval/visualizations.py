@@ -4,8 +4,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 import wandb
-from scipy.stats import norm
+from scipy.stats import beta, norm
 from torch import Tensor
+
+
+def plot_partial_betas(betas: Tensor, channels: int) -> None:
+    fig = go.Figure()
+    x = np.linspace(1, channels, num=channels)
+    shift = betas[0][2].cpu().detach().numpy()
+    channels_div = np.arange(0, channels) / channels
+    beta_sum = np.zeros(channels)
+    betas[betas == 0] = 1e-5
+
+    for params in betas:
+        params = params.cpu().detach().numpy()
+        dist = beta.pdf(channels_div, params[0], params[1])
+        beta_sum += dist
+        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"alpha={params[0]:.2f}, beta={params[1]:.2f}"))
+
+    fig.add_traces(go.Scatter(x=x, y=beta_sum + shift, mode="lines", name=f"Sum of betas, shift={shift:.2}", line_color="black"))
+    fig.update_layout(title="Partial betas for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+    wandb.log({"partial_betas": fig})
 
 
 def plot_partial_hats(pixel_hats: Tensor, mu_type: str, channels: int) -> None:

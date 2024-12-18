@@ -7,6 +7,7 @@ from src.eval.visualizations import (
     plot_average_reflectance,
     plot_bias,
     plot_images,
+    plot_partial_betas,
     plot_partial_hats,
     plot_partial_polynomials,
     plot_partial_polynomials_degree,
@@ -48,7 +49,7 @@ class Evaluator:
         if self.ae:
             return out
         rendered = self.variance_model.renderer(out)
-        if self.cfg.bias_renderer == "Mean":
+        if self.cfg.bias_renderer == "Mean" or self.cfg.bias_renderer == "None":
             rendered += self.bias_model
         elif self.bias_model is not None:
             rendered += self.bias_model(0)
@@ -78,7 +79,9 @@ class Evaluator:
         img_center = raw_output.shape[2] // 2
         center_slice = raw_output[..., img_center, img_center]
         renderer_type = self.cfg.variance_renderer
-        if renderer_type == "GaussianRenderer":
+        if renderer_type == "BetaRenderer":
+            plot_partial_betas(center_slice, self.cfg.channels)
+        elif renderer_type == "GaussianRenderer":
             plot_partial_hats(center_slice, self.cfg.mu_type, self.cfg.channels)
         elif renderer_type == "PolynomialRenderer":
             plot_partial_polynomials(center_slice, self.cfg.channels)
@@ -88,6 +91,6 @@ class Evaluator:
             plot_splines(self.variance_model.renderer(center_slice)[idx])
 
     def _plot_bias(self) -> None:
-        if self.bias_model is not None:
+        if self.bias_model is not None and self.bias_model != 0:
             bias = self.bias_model if self.cfg.bias_renderer == "Mean" else self.bias_model(0)
             plot_bias(bias[0, :, 0, 0])
