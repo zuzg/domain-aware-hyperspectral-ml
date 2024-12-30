@@ -48,7 +48,7 @@ class Modeller(nn.Module):
         x = self.relu(self.conv2(x))
         x = self.conv3(x)
         x = x.view(x.shape[0], self.k, self.num_params, self.size, self.size)
-        if self.num_params >= 3:
+        if self.num_params > 3:
             if self.multi_mu:
                 x[:, :, 3:4] = calculate_mu(self.softmax(x[:, :, :4]))
                 x[:, :, 4:5] = self.sigmoid(x[:, :, 4:5])  # std
@@ -60,4 +60,5 @@ class Modeller(nn.Module):
                 x[:, :, 2:] = self.tanh(x[:, :, 2:])
         else:
             x = self.tanh(x)
+            # TODO relu for beta dist
         return x

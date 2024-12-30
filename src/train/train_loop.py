@@ -128,6 +128,9 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     psnr = PeakSignalNoiseRatio().to(cfg.device)
 
+    if cfg.wandb:
+        wandb.watch(model, log_freq=10)
+
     for epoch in range(cfg.epochs):
         train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
         val_loss, val_psnr, val_sam = validate_step(model, valloader, criterion, psnr, cfg.device)

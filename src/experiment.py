@@ -40,7 +40,8 @@ class Experiment:
         )
 
     def prepare_datasets(self, div: np.ndarray) -> tuple[Dataset]:
-        splits = np.split(np.random.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
+        rng = np.random.default_rng(12345)
+        splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
             HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
             HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
@@ -78,6 +79,9 @@ class Experiment:
     def _prepare_bias_model(self, div: np.ndarray) -> nn.Module:
         if self.cfg.bias_renderer == "Mean":
             return mean_path_to_bias(MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
+        
+        elif self.cfg.bias_renderer == "None":
+            return 0
 
         else:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
@@ -96,7 +100,7 @@ class Experiment:
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
             modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
-            modeller.load_state_dict(torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_k=5_full_soill.pth"))
+            modeller.load_state_dict(torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth"))
             modeller = modeller.to(self.cfg.device)
             predict_soil_parameters(testset, modeller, 4, self.cfg, self.ae)
 
@@ -106,7 +110,7 @@ class Experiment:
             model = train(model, self.trainloader, self.valloader, self.cfg)
 
             modeller = model.variance.encoder if self.ae else model.variance.modeller
-            torch.save(modeller.state_dict(), OUTPUT_PATH  / "models"/ f"modeller_{self.name}_{self.cfg.epochs}_k=5_full_soill.pth")
+            torch.save(modeller.state_dict(), OUTPUT_PATH  / "models"/ f"modeller_{self.name}_{self.cfg.epochs}_group.pth")
 
             if self.cfg.wandb:
                 Evaluator(model, self.cfg, self.ae).evaluate(self.testloader)

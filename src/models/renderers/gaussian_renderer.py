@@ -12,14 +12,16 @@ class GaussianRenderer(BaseRenderer):
 
     def __call__(self, batch: Tensor) -> Tensor:
         batch_size, k, params, h, w = batch.shape
-        self.bands = torch.arange(1, self.channels + 1).float().repeat(k, h, w, 1).to(self.device)
-        rendered = torch.zeros((batch_size, self.channels, h, w))
+        self.bands = torch.arange(1, self.channels + 1, device=self.device).float().repeat(k, h, w, 1)
+        rendered_list = []
 
         for idx in range(batch_size):
             dists = self.generate_distribution(batch[idx, :, 0, ...], batch[idx, :, 1, ...], batch[idx, :, 2, ...])
             pixel_dist = torch.sum(dists, dim=0)
-            rendered[idx] = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]
+            rendered_frame = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]
+            rendered_list.append(rendered_frame)
 
+        rendered = torch.stack(rendered_list)
         return rendered.to(self.device)
 
     def generate_distribution(self, mu: Tensor, sigma: Tensor, scale: Tensor) -> Tensor:

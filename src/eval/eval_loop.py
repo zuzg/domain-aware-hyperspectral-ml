@@ -91,6 +91,6 @@ class Evaluator:
             plot_splines(self.variance_model.renderer(center_slice)[idx])
 
     def _plot_bias(self) -> None:
-        if self.bias_model is not None and self.bias_model != 0:
+        if self.bias_model is not None:
             bias = self.bias_model if self.cfg.bias_renderer == "Mean" else self.bias_model(0)
             plot_bias(bias[0, :, 0, 0])
