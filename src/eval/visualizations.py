@@ -22,7 +22,9 @@ def plot_partial_betas(betas: Tensor, channels: int) -> None:
         beta_sum += dist
         fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"alpha={params[0]:.2f}, beta={params[1]:.2f}"))
 
-    fig.add_traces(go.Scatter(x=x, y=beta_sum + shift, mode="lines", name=f"Sum of betas, shift={shift:.2}", line_color="black"))
+    fig.add_traces(
+        go.Scatter(x=x, y=beta_sum + shift, mode="lines", name=f"Sum of betas, shift={shift:.2}", line_color="black")
+    )
     fig.update_layout(title="Partial betas for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_betas": fig})
 
@@ -48,8 +50,10 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
         dist = scale * norm.pdf(range(0, channels), mu, sigma)
         hat_sum += dist
         fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
-    
-    fig.add_traces(go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black"))
+
+    fig.add_traces(
+        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
+    )
     fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
     wandb.log({"partial_hats": fig})
 
@@ -68,7 +72,7 @@ def plot_partial_polynomials(polys: Tensor, channels: int) -> None:
 def plot_partial_polynomials_degree(polys: Tensor, k: int, channels: int) -> None:
     fig = go.Figure()
     x = np.linspace(1 / 100, channels / 100, num=channels)
-    exp = np.linspace(0, k-1, num=k)
+    exp = np.linspace(0, k - 1, num=k)
     for i, params in enumerate(polys):
         params = params.cpu().detach().numpy()
         poly = params[0] * x ** exp[i]
@@ -86,7 +90,7 @@ def plot_splines(splines: Tensor) -> None:
     wandb.log({"splines": fig})
 
 
-def plot_images(gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
+def plot_images(gt_img: Tensor, pred_img: Tensor, mask_nan: bool, key: str) -> None:
     cmap = matplotlib.colormaps.get_cmap(cmc.batlow)
     if mask_nan:
         pred_img[gt_img == 0] = np.nan
@@ -98,10 +102,10 @@ def plot_images(gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
     axs[0].set_title("GT")
     axs[1].imshow(pred_img[0], cmap=cmap)
     axs[1].set_title("PRED")
-    wandb.log({"images": fig})
+    wandb.log({key: fig})
 
 
-def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor) -> None:
+def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor, key: str) -> None:
     fig = plt.figure(figsize=(10, 5))
     pred_img[gt_img == 0] = np.nan
     gt_img[gt_img == 0] = np.nan
@@ -112,16 +116,16 @@ def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor) -> None:
     plt.xlabel("Band")
     fig.legend()
     plt.title("Average reflectance")
-    wandb.log({"reflectance": fig})
+    wandb.log({key: fig})
 
 
-def plot_pixelwise(gt_img: Tensor, pred_img: Tensor, size: int) -> None:
+def plot_pixelwise(gt_img: Tensor, pred_img: Tensor, size: int, key: str) -> None:
     fig, axs = plt.subplots(10, 10, figsize=(20, 25))
     for i in range(10):
         for j in range(10):
             axs[i, j].plot(pred_img[:, i + size, j + size])
             axs[i, j].plot(gt_img[:, i + size, j + size])
-    wandb.log({"pixelwise": wandb.Image(fig)})
+    wandb.log({key: wandb.Image(fig)})
 
 
 def plot_bias(bias: Tensor) -> None:

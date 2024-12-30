@@ -39,9 +39,7 @@ class Modeller(nn.Module):
             self.num_params += 3
 
         self.conv3 = nn.Conv2d(64, self.num_params * self.k, kernel_size=1)
-        nn.init.xavier_uniform_(
-            self.conv3.weight, gain=nn.init.calculate_gain("sigmoid")
-        )
+        nn.init.xavier_uniform_(self.conv3.weight, gain=nn.init.calculate_gain("sigmoid"))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.relu(self.conv1(x))

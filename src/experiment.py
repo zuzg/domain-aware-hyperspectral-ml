@@ -28,7 +28,7 @@ class Experiment:
         if self.ae:
             return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
         return f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}", [
-            f"μ: {self.cfg.mu_type}", "MLP"
+            f"μ: {self.cfg.mu_type}",
         ]
 
     def _initialize_wandb(self) -> None:
@@ -43,13 +43,18 @@ class Experiment:
         rng = np.random.default_rng(12345)
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
-            HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
-            HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
-            HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True),
+            HyperviewDataset(
+                TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+            ),
+            HyperviewDataset(
+                TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+            ),
+            HyperviewDataset(
+                TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+            ),
         )
 
-    def prepare_dataloaders(
-        self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
+    def prepare_dataloaders(self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
         return (
             DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, drop_last=True),
             DataLoader(valset, batch_size=self.cfg.batch_size, drop_last=True),
@@ -64,7 +69,7 @@ class Experiment:
 
     def _setup_autoencoder(self, div: np.ndarray) -> nn.Module:
         self.num_params = 3
-        variance_model =  Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        variance_model = Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
         bias_model = self._prepare_bias_model(div)
         return BiasVarianceModel(bias_model, variance_model)
 
@@ -72,14 +77,16 @@ class Experiment:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
         modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
-        variance_model = VarianceModel(modeller, variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type))
+        variance_model = VarianceModel(
+            modeller, variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type)
+        )
         bias_model = self._prepare_bias_model(div)
         return BiasVarianceModel(bias_model, variance_model)
 
     def _prepare_bias_model(self, div: np.ndarray) -> nn.Module:
         if self.cfg.bias_renderer == "Mean":
             return mean_path_to_bias(MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
-        
+
         elif self.cfg.bias_renderer == "None":
             return 0
 
@@ -87,7 +94,9 @@ class Experiment:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
             bias_renderer_model = bias_renderer.model(self.cfg.device, self.cfg.channels)
             bias_shape = (self.cfg.k, bias_renderer.num_params)
-            bias_model = BiasModel(bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device)
+            bias_model = BiasModel(
+                bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device
+            )
 
             bias_model = pretrain(bias_model, self.trainloader, self.cfg)
             for param in bias_model.parameters():
@@ -100,7 +109,9 @@ class Experiment:
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
             modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
-            modeller.load_state_dict(torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth"))
+            modeller.load_state_dict(
+                torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth")
+            )
             modeller = modeller.to(self.cfg.device)
             predict_soil_parameters(testset, modeller, 4, self.cfg, self.ae)
 
@@ -110,12 +121,13 @@ class Experiment:
             model = train(model, self.trainloader, self.valloader, self.cfg)
 
             modeller = model.variance.encoder if self.ae else model.variance.modeller
-            torch.save(modeller.state_dict(), OUTPUT_PATH  / "models"/ f"modeller_{self.name}_{self.cfg.epochs}_group.pth")
+            torch.save(
+                modeller.state_dict(), OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth"
+            )
 
             if self.cfg.wandb:
-                Evaluator(model, self.cfg, self.ae).evaluate(self.testloader)
+                div = max_values.reshape(max_values.shape[0], 1, 1)
+                Evaluator(model, self.cfg, self.ae, testset.bias / div).evaluate(self.testloader)
             if self.cfg.predict_soil:
-                predict_soil_parameters(
-                    testset, modeller, self.num_params, self.cfg, self.ae
-                )
+                predict_soil_parameters(testset, modeller, self.num_params, self.cfg, self.ae)
         wandb.finish()

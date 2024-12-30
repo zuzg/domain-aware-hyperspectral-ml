@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
@@ -17,10 +18,11 @@ from src.eval.visualizations import (
 
 
 class Evaluator:
-    def __init__(self, model: nn.Module, cfg: ExperimentConfig, ae: bool):
+    def __init__(self, model: nn.Module, cfg: ExperimentConfig, ae: bool, bias: np.ndarray):
         self.model = model
         self.cfg = cfg
         self.ae = ae
+        self.bias = bias
         self.modeller, self.variance_model, self.bias_model = self._initialize_model_components()
 
     def _initialize_model_components(self) -> tuple[nn.Module | None]:
@@ -49,10 +51,10 @@ class Evaluator:
         if self.ae:
             return out
         rendered = self.variance_model.renderer(out)
-        if self.cfg.bias_renderer == "Mean" or self.cfg.bias_renderer == "None":
-            rendered += self.bias_model
-        elif self.bias_model is not None:
-            rendered += self.bias_model(0)
+        # if self.cfg.bias_renderer == "Mean" or self.cfg.bias_renderer == "None":
+        #     rendered += self.bias_model
+        # elif self.bias_model is not None:
+        #     rendered += self.bias_model(0)
         return rendered
 
     def _plot_results(self, imgs: list[Tensor], renders: list[Tensor], raw_outputs: list[Tensor]) -> None:
@@ -68,10 +70,13 @@ class Evaluator:
         self._plot_bias()
 
     def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
-        plot_images(gt_img.numpy(), pred_img.numpy(), mask_nan)
-        plot_average_reflectance(gt_img.numpy(), pred_img.numpy())
+        plot_images(gt_img.numpy(), pred_img.numpy(), mask_nan, "images")
+        plot_images(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, mask_nan, "images without bias")
+        plot_average_reflectance(gt_img.numpy(), pred_img.numpy(), "reflectance without bias")
+        plot_average_reflectance(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, "reflectance")
         img_center = gt_img.shape[1] // 2
-        plot_pixelwise(gt_img.numpy(), pred_img.numpy(), img_center)
+        plot_pixelwise(gt_img.numpy(), pred_img.numpy(), img_center, "pixelwise without bias")
+        plot_pixelwise(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, img_center, "pixelwise")
 
     def _plot_variance_renderer(self, raw_output: Tensor, idx: int) -> None:
         if self.ae or raw_output is None:
