@@ -2,6 +2,7 @@ import cmcrameri.cm as cmc
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
 import plotly.graph_objects as go
 import wandb
 from scipy.stats import beta, norm
@@ -135,3 +136,12 @@ def plot_bias(bias: Tensor) -> None:
     fig.legend()
     plt.title("Bias")
     wandb.log({"bias": fig})
+
+
+def plot_param_stats(stats: Tensor) -> None:
+    fig = px.box(stats, points="all")
+    ticks = ["mean", "std", "scale", "shift"]
+    fig.update_layout(
+        xaxis=dict(tickmode="array", tickvals=[0, 1, 2, 3], ticktext=ticks),  # change 1
+    )
+    wandb.log({"Hat stats": fig})

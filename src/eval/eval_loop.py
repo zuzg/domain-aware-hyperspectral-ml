@@ -8,6 +8,7 @@ from src.eval.visualizations import (
     plot_average_reflectance,
     plot_bias,
     plot_images,
+    plot_param_stats,
     plot_partial_betas,
     plot_partial_hats,
     plot_partial_polynomials,
@@ -32,20 +33,28 @@ class Evaluator:
 
     def evaluate(self, testloader: DataLoader) -> None:
         self.modeller.eval()
-        imgs, renders, raw_outputs = self._process_testloader(testloader)
+        imgs, renders, raw_outputs, params = self._process_testloader(testloader)
         self._plot_results(imgs, renders, raw_outputs)
+        plot_param_stats(params)
 
     def _process_testloader(self, testloader: DataLoader) -> tuple[list[Tensor]]:
         imgs, renders, raw_outputs = [], [], []
+        params = []
         with torch.no_grad():
             for img in testloader:
                 img = img.to(self.cfg.device)
                 out = self.modeller(img)
+                params.append(torch.mean(out, dim=(0, 1, 3, 4)).cpu())
+                params.append(torch.amax(out, dim=(0, 1, 3, 4)).cpu())
+                params.append(torch.amin(out, dim=(0, 1, 3, 4)).cpu())
                 render = self._apply_rendering(out)
                 imgs.append(img)
                 renders.append(render)
                 raw_outputs.append(out)
-        return imgs, renders, raw_outputs
+        params_stacked = torch.stack(params, dim=0) * torch.tensor(
+            [self.cfg.channels, self.cfg.channels, self.cfg.channels, 1]
+        )
+        return imgs, renders, raw_outputs, params_stacked
 
     def _apply_rendering(self, out: Tensor) -> Tensor:
         if self.ae:
