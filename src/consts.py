@@ -4,6 +4,8 @@ from src.config import RendererConfig
 from src.models.autoencoder import Autoencoder
 from src.models.renderers.beta_renderer import BetaRenderer
 from src.models.renderers.gaussian_renderer import GaussianRenderer
+from src.models.renderers.gaussian_asymmetric_renderer import GaussianAsymmetricRenderer
+from src.models.renderers.gaussian_skew_renderer import GaussianSkewRenderer
 from src.models.renderers.polynomial_degree_renderer import PolynomialDegreeRenderer
 from src.models.renderers.polynomial_renderer import PolynomialRenderer
 from src.models.renderers.spline_renderer import SplineRenderer
@@ -28,6 +30,8 @@ SPLIT_RATIO: list[int] = [1000, 124, 608]
 RENDERERS_DICT: dict[str, RendererConfig] = {
     "BetaRenderer": RendererConfig(BetaRenderer, 3),
     "GaussianRenderer": RendererConfig(GaussianRenderer, 4),
+    "GaussianAsymmetricRenderer": RendererConfig(GaussianAsymmetricRenderer, 5),
+    "GaussianSkewRenderer": RendererConfig(GaussianSkewRenderer, 5),
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
     "SplineRenderer": RendererConfig(SplineRenderer, 1),

@@ -59,6 +59,72 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
     wandb.log({"partial_hats": fig})
 
 
+def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
+    fig = go.Figure()
+    x = np.linspace(1, channels, num=channels)
+    shift = pixel_hats[0][4].cpu().detach().numpy()
+    k = len(pixel_hats)
+    hat_sum = np.zeros(channels)
+
+    for i, stats in enumerate(pixel_hats):
+        stats = stats.cpu().detach().numpy()
+        mu = channels * stats[0]
+        sigma_left, sigma_right, scale = channels * stats[1], channels * stats[2], channels * stats[3]
+
+        dist = np.zeros(channels)
+        for idx in range(channels):
+            if idx + 1 <= mu:
+                dist[idx] = scale * norm.pdf(idx + 1, mu, sigma_left)
+            else:
+                dist[idx] = scale * norm.pdf(idx + 1, mu, sigma_right)
+
+        hat_sum += dist
+        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σₗ={sigma_left:.1f}, σᵣ={sigma_right:.1f}, scale={scale:.1f}"))
+
+    fig.add_traces(
+        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
+    )
+    fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+    wandb.log({"partial_hats": fig})
+
+
+def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
+    fig = go.Figure()
+    x = np.linspace(1, channels, num=channels)
+    shift = pixel_hats[0][3].cpu().detach().numpy()
+    k = len(pixel_hats)
+    hat_sum = np.zeros(channels)  # Sum of all distributions
+
+    for i, stats in enumerate(pixel_hats):
+        stats = stats.cpu().detach().numpy()
+        mu = channels * stats[0]  # Mean
+        sigma = channels * stats[1]  # Standard deviation
+        scale = channels * stats[2]  # Scaling factor
+        skew = channels * stats[4]  # Skewness parameter
+
+        # Generate skew-normal PDF
+        x_vals = np.linspace(0, channels, num=channels)
+        pdf = 2 * scale * norm.pdf(x_vals, mu, sigma) * norm.cdf(skew * (x_vals - mu) / sigma)
+
+        hat_sum += pdf
+        fig.add_traces(go.Scatter(
+            x=x, y=pdf, mode="lines",
+            name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}, skew={skew:.1f}"
+        ))
+
+    fig.add_traces(go.Scatter(
+        x=x, y=hat_sum + shift, mode="lines",
+        name=f"Sum of hats, shift={shift:.2}", line_color="black"
+    ))
+
+    fig.update_layout(
+        title="Partial Hats for a Random Pixel",
+        xaxis_title="Band",
+        yaxis_title="Intensity",
+    )
+    wandb.log({"partial_hats": fig})
+
+
 def plot_partial_polynomials(polys: Tensor, channels: int) -> None:
     fig = go.Figure()
     x = np.linspace(1, channels, num=channels)
@@ -139,9 +205,10 @@ def plot_bias(bias: Tensor) -> None:
 
 
 def plot_param_stats(stats: Tensor) -> None:
-    fig = px.box(stats, points="all")
+    fig = px.box(stats)
     ticks = ["mean", "std", "scale", "shift"]
     fig.update_layout(
         xaxis=dict(tickmode="array", tickvals=[0, 1, 2, 3], ticktext=ticks),  # change 1
     )
+    fig.write_html("stats.html")
     wandb.log({"Hat stats": fig})

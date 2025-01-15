@@ -11,6 +11,8 @@ from src.eval.visualizations import (
     plot_param_stats,
     plot_partial_betas,
     plot_partial_hats,
+    plot_partial_hats_asymmetric,
+    plot_partial_hats_skew,
     plot_partial_polynomials,
     plot_partial_polynomials_degree,
     plot_pixelwise,
@@ -44,9 +46,15 @@ class Evaluator:
             for img in testloader:
                 img = img.to(self.cfg.device)
                 out = self.modeller(img)
-                params.append(torch.mean(out, dim=(0, 1, 3, 4)).cpu())
-                params.append(torch.amax(out, dim=(0, 1, 3, 4)).cpu())
-                params.append(torch.amin(out, dim=(0, 1, 3, 4)).cpu())
+                flattened = out.permute(0, 1, 3, 4, 2).reshape(-1, 4)
+
+                # Randomly sample 10,000 points along the third axis
+                indices = torch.randint(0, flattened.size(0), (1000,))  # Generate random indices
+                samples = flattened[indices]
+                params.extend(samples.cpu())
+                # params.append(torch.mean(out, dim=(0, 1, 3, 4)).cpu())
+                # params.append(torch.amax(out, dim=(0, 1, 3, 4)).cpu())
+                # params.append(torch.amin(out, dim=(0, 1, 3, 4)).cpu())
                 render = self._apply_rendering(out)
                 imgs.append(img)
                 renders.append(render)
@@ -97,6 +105,10 @@ class Evaluator:
             plot_partial_betas(center_slice, self.cfg.channels)
         elif renderer_type == "GaussianRenderer":
             plot_partial_hats(center_slice, self.cfg.mu_type, self.cfg.channels)
+        elif renderer_type == "GaussianAsymmetricRenderer":
+            plot_partial_hats_asymmetric(center_slice, self.cfg.mu_type, self.cfg.channels)
+        elif renderer_type == "GaussianSkewRenderer":
+            plot_partial_hats_skew(center_slice, self.cfg.mu_type, self.cfg.channels)
         elif renderer_type == "PolynomialRenderer":
             plot_partial_polynomials(center_slice, self.cfg.channels)
         elif renderer_type == "PolynomialDegreeRenderer":
