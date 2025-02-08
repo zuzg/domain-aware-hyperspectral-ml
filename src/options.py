@@ -9,13 +9,14 @@ def parse_args() -> ExperimentConfig:
     parser.add_argument("--channels", type=int, default=150)
     parser.add_argument("--img_size", type=int, default=100)
     parser.add_argument("--max_val", type=int, default=6000)
+    parser.add_argument("--dual_mode", type=bool, default=False)
     parser.add_argument("--bias_renderer", type=str, default="Mean")
     parser.add_argument(
         "--variance_renderer",
         type=str,
-        default="GaussianRenderer",
+        default="GaussianSkewRenderer",
         choices=[
-            "GaussianRenderer",
+            "BetaRenderer" "GaussianRenderer",
             "PolynomialDegreeRenderer",
             "PolynomialRenderer",
             "SplineRenderer",
@@ -28,12 +29,12 @@ def parse_args() -> ExperimentConfig:
     )
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--wandb", type=bool, default=True)
     parser.add_argument("--save_model", type=bool, default=True)
-    parser.add_argument("--predict_soil", type=bool, default=True)
+    parser.add_argument("--predict_soil", type=bool, default=False)
 
     args = parser.parse_args()
 

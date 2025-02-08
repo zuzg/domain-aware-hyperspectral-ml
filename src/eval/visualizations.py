@@ -79,7 +79,14 @@ def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int
                 dist[idx] = scale * norm.pdf(idx + 1, mu, sigma_right)
 
         hat_sum += dist
-        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σₗ={sigma_left:.1f}, σᵣ={sigma_right:.1f}, scale={scale:.1f}"))
+        fig.add_traces(
+            go.Scatter(
+                x=x,
+                y=dist,
+                mode="lines",
+                name=f"μ={mu:.1f}, σₗ={sigma_left:.1f}, σᵣ={sigma_right:.1f}, scale={scale:.1f}",
+            )
+        )
 
     fig.add_traces(
         go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
@@ -88,7 +95,7 @@ def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int
     wandb.log({"partial_hats": fig})
 
 
-def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
+def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, key: str = "partial_hats") -> None:
     fig = go.Figure()
     x = np.linspace(1, channels, num=channels)
     shift = pixel_hats[0][3].cpu().detach().numpy()
@@ -107,22 +114,20 @@ def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int) -> N
         pdf = 2 * scale * norm.pdf(x_vals, mu, sigma) * norm.cdf(skew * (x_vals - mu) / sigma)
 
         hat_sum += pdf
-        fig.add_traces(go.Scatter(
-            x=x, y=pdf, mode="lines",
-            name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}, skew={skew:.1f}"
-        ))
+        fig.add_traces(
+            go.Scatter(x=x, y=pdf, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}, skew={skew:.1f}")
+        )
 
-    fig.add_traces(go.Scatter(
-        x=x, y=hat_sum + shift, mode="lines",
-        name=f"Sum of hats, shift={shift:.2}", line_color="black"
-    ))
+    fig.add_traces(
+        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
+    )
 
     fig.update_layout(
         title="Partial Hats for a Random Pixel",
         xaxis_title="Band",
         yaxis_title="Intensity",
     )
-    wandb.log({"partial_hats": fig})
+    wandb.log({key: fig})
 
 
 def plot_partial_polynomials(polys: Tensor, channels: int) -> None:

@@ -32,7 +32,7 @@ def parse_args() -> PredictionConfig:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="data/hyperview/test_data")
     parser.add_argument(
-        "--modeller_path", type=str, default="output/models/modeller_var=GaussianRenderer_bias=Mean_k=5_20_k=5_full_soil.pth"
+        "--modeller_path", type=str, default="output/models/modeller_var=GaussianRenderer_bias=Mean_k=5_15_group.pth"
     )
     parser.add_argument("--regressor_path", type=str, default="output/models/xgb_5.pickle")
     parser.add_argument("--single_model", type=bool, default=True)
@@ -67,7 +67,7 @@ class Prediction:
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
         dataset = HyperviewDataset(self.cfg.dataset_path, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True)
-        features = prepare_datasets(dataset, modeller, self.cfg.k, GT_DIM, self.cfg.batch_size, self.cfg.device)
+        features = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, GT_DIM, self.cfg.batch_size, self.cfg.device)
         features_agg = np.sum(features, axis=(2, 3)) / np.count_nonzero(features, axis=(2, 3))
 
         with open(self.cfg.regressor_path, "rb") as f:
@@ -75,7 +75,7 @@ class Prediction:
 
         preds = predict_params(regressor, features_agg)
         submission = pd.DataFrame(data=preds, columns=GT_NAMES)
-        submission.to_csv("output/submission_ml_agg_5_new.csv", index_label="sample_index")
+        submission.to_csv("output/submission_ml_grouped.csv", index_label="sample_index")
 
 
 def main() -> None:

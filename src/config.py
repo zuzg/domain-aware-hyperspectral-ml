@@ -11,6 +11,7 @@ class ExperimentConfig:
     img_size: int
     channels: int
     max_val: int
+    dual_mode: bool
     bias_renderer: str
     variance_renderer: str
     k: int

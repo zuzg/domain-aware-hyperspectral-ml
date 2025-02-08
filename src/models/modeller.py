@@ -19,14 +19,14 @@ class Modeller(nn.Module):
         channels: int,
         k: int,
         num_params: int,
-        multi_mu: bool = False,
+        multi_mu: bool = True,
     ):
         super().__init__()
         self.k = k
         self.size = img_size
         self.num_params = num_params
         self.multi_mu = multi_mu
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU()
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
         self.softmax = nn.Softmax(dim=1)
@@ -50,7 +50,7 @@ class Modeller(nn.Module):
             if self.multi_mu:
                 x[:, :, 3:4] = calculate_mu(self.softmax(x[:, :, :4]))
                 x[:, :, 4:5] = self.sigmoid(x[:, :, 4:5])  # std
-                x[:, :, 5:] = self.tanh(x[:, :, 5:])  # scale, shift
+                x[:, :, 5:] = self.tanh(x[:, :, 5:])  # scale, shift, skew
                 # delete first two dimensions
                 x = x[:, :, 3:]
             else:

@@ -11,9 +11,9 @@ from src.data.preprocessing import mean_path_to_bias
 from src.eval.eval_loop import Evaluator
 from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
+from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
 from soil_params.pred_ml import predict_soil_parameters
-from src.train.train_loop import pretrain, train
 
 
 class Experiment:
@@ -27,7 +27,11 @@ class Experiment:
     def _set_experiment_name_and_tags(self) -> tuple[str, list[str]]:
         if self.ae:
             return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
-        return f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}", [
+        if self.cfg.dual_mode:
+            pre = "[DUAL]"
+        else:
+            pre = ""
+        return pre + f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}", [
             f"μ: {self.cfg.mu_type}",
         ]
 
@@ -77,11 +81,13 @@ class Experiment:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
         modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
-        variance_model = VarianceModel(
-            modeller, variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type)
-        )
-        bias_model = self._prepare_bias_model(div)
-        return BiasVarianceModel(bias_model, variance_model)
+        renderer = variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type)
+        # bias_model = self._prepare_bias_model(div)
+        if self.cfg.dual_mode:
+            return DualModeAutoencoder(
+                modeller, renderer, self.cfg.batch_size, self.cfg.img_size, self.cfg.k, self.num_params
+            )
+        return VarianceModel(modeller, renderer)
 
     def _prepare_bias_model(self, div: np.ndarray) -> nn.Module:
         if self.cfg.bias_renderer == "Mean":
@@ -98,7 +104,7 @@ class Experiment:
                 bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device
             )
 
-            bias_model = pretrain(bias_model, self.trainloader, self.cfg)
+            # bias_model = pretrain(bias_model, self.trainloader, self.cfg)
             for param in bias_model.parameters():
                 param.requires_grad = False
         return bias_model
@@ -118,9 +124,15 @@ class Experiment:
         else:
             self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
             model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
+
+            if self.cfg.dual_mode:
+                from src.train.train_loop_dual import train
+            else:
+                from src.train.train_loop import train
+
             model = train(model, self.trainloader, self.valloader, self.cfg)
 
-            modeller = model.variance.encoder if self.ae else model.variance.modeller
+            modeller = model.encoder if self.ae else model.modeller
             torch.save(
                 modeller.state_dict(), OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth"
             )

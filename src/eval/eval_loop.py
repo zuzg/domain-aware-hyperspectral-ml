@@ -18,6 +18,7 @@ from src.eval.visualizations import (
     plot_pixelwise,
     plot_splines,
 )
+from src.models.dual import generate_latent
 
 
 class Evaluator:
@@ -26,12 +27,12 @@ class Evaluator:
         self.cfg = cfg
         self.ae = ae
         self.bias = bias
-        self.modeller, self.variance_model, self.bias_model = self._initialize_model_components()
+        self.modeller, self.renderer, self.bias_model = self._initialize_model_components()
 
     def _initialize_model_components(self) -> tuple[nn.Module | None]:
         if self.ae:
             return self.model, None, self.model.bias
-        return self.model.variance.modeller, self.model.variance, self.model.bias
+        return self.model.modeller, self.model.renderer, None
 
     def evaluate(self, testloader: DataLoader) -> None:
         self.modeller.eval()
@@ -67,7 +68,7 @@ class Evaluator:
     def _apply_rendering(self, out: Tensor) -> Tensor:
         if self.ae:
             return out
-        rendered = self.variance_model.renderer(out)
+        rendered = self.renderer(out)
         # if self.cfg.bias_renderer == "Mean" or self.cfg.bias_renderer == "None":
         #     rendered += self.bias_model
         # elif self.bias_model is not None:
@@ -85,6 +86,8 @@ class Evaluator:
             self._plot_image_comparisons(imgs[i][i].cpu(), renders[i][i].cpu(), mask_nan)
             self._plot_variance_renderer(raw_outputs[i][i] if not self.ae else None, i)
         self._plot_bias()
+        if self.cfg.dual_mode:
+            self.dual_mode()
 
     def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
         plot_images(gt_img.numpy(), pred_img.numpy(), mask_nan, "images")
@@ -114,9 +117,19 @@ class Evaluator:
         elif renderer_type == "PolynomialDegreeRenderer":
             plot_partial_polynomials_degree(center_slice, self.cfg.k, self.cfg.channels)
         elif renderer_type == "SplineRenderer":
-            plot_splines(self.variance_model.renderer(center_slice)[idx])
+            plot_splines(self.renderer(center_slice)[idx])
 
     def _plot_bias(self) -> None:
         if self.bias_model is not None:
             bias = self.bias_model if self.cfg.bias_renderer == "Mean" else self.bias_model(0)
             plot_bias(bias[0, :, 0, 0])
+
+    def dual_mode(self) -> None:
+        for i in range(3):
+            latent = generate_latent(self.cfg.batch_size, self.cfg.img_size, self.cfg.k, 5, "cuda")
+            plot_partial_hats_skew(latent[0, ..., 50, 50], self.cfg.mu_type, self.cfg.channels, "ph_dual_gt")
+            generated_images = self.renderer(latent)  # 16 150 100 100
+            reconstructed_latents = self.modeller(generated_images)  # 16 5 5 100 100
+            plot_partial_hats_skew(
+                reconstructed_latents[0, ..., 50, 50], self.cfg.mu_type, self.cfg.channels, "ph_dual_pred"
+            )
