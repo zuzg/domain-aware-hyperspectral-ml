@@ -28,7 +28,7 @@ def train_step(
     optimizer: torch.optim.Optimizer,
     device: str,
     epoch: int,
-    alpha: float = 0.7,
+    alpha: float,
 ) -> float:
     """Run a single training step over the trainloader."""
     model.train()
@@ -71,7 +71,7 @@ def validate_step(
     psnr: nn.Module,
     mae: nn.Module,
     device: str,
-    alpha: float = 0.7,
+    alpha: float,
 ) -> tuple[float]:
     """Run a validation step over the valloader and compute metrics."""
     model.eval()
@@ -116,35 +116,37 @@ def validate_step(
 
 def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
     """Train the model with given configurations."""
-    criterion = nn.MSELoss(reduction="sum")
-    criterion_dual = nn.MSELoss()
+    criterion = nn.HuberLoss(reduction="sum")
+    criterion_dual = nn.HuberLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     psnr = PeakSignalNoiseRatio().to(cfg.device)
     mae = MeanAbsoluteError().to(cfg.device)
 
+    alpha = 0.5
     if cfg.wandb:
         wandb.watch(model, criterion, log="all", log_freq=10, log_graph=True)
 
     for epoch in range(cfg.epochs):
         train_loss, train_loss_classical, train_loss_inverse = train_step(
-            model, trainloader, criterion, criterion_dual, optimizer, cfg.device, epoch
+            model, trainloader, criterion, criterion_dual, optimizer, cfg.device, epoch, alpha=alpha
         )
         val_loss, val_mse, val_mae, val_psnr, val_sam = validate_step(
-            model, valloader, criterion, criterion_dual, psnr, mae, cfg.device
+            model, valloader, criterion, criterion_dual, psnr, mae, cfg.device, alpha=alpha
         )
         if cfg.wandb:
             wandb.log(
                 {
-                    "metrics/train/MSE_dual": train_loss,
-                    "metrics/train/MSE": train_loss_classical,
-                    "metrics/train/MSE_inv": train_loss_inverse,
-                    "metrics/val/MSE_dual": val_loss,
-                    "metrics/val/MSE": val_mse,
+                    "metrics/train/Huber_dual": train_loss,
+                    "metrics/train/Huber": train_loss_classical,
+                    "metrics/train/Huber_inv": train_loss_inverse,
+                    "metrics/val/Huber_dual": val_loss,
+                    "metrics/val/Huber": val_mse,
                     "metrics/val/PSNR": val_psnr,
                     "metrics/val/SAM": val_sam,
                     "metrics/val/MAE": val_mae,
                 }
             )
         scheduler.step()
+        alpha += 0.03
     return model
