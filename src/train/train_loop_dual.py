@@ -3,6 +3,7 @@ import torch
 import wandb
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
+from torchmetrics import MeanAbsoluteError
 from torchmetrics.image import PeakSignalNoiseRatio
 from tqdm import tqdm
 
@@ -68,20 +69,19 @@ def validate_step(
     criterion: nn.Module,
     criterion_dual: nn.Module,
     psnr: nn.Module,
+    mae: nn.Module,
     device: str,
     alpha: float = 0.7,
 ) -> tuple[float]:
     """Run a validation step over the valloader and compute metrics."""
     model.eval()
-    running_loss = running_psnr = running_sam = 0.0
+    running_loss = running_psnr = running_sam = running_mse = running_mae = 0.0
 
     with torch.no_grad():
         for batch in dataloader:
             batch = batch.to(device)
             mask = batch != 0
-            # pred = model(batch)
 
-            # loss = compute_loss(criterion, pred, batch, mask)
             # Classical Autoencoder Mode
             original_images, reconstructed_images = model(batch, mode="classical")
             classical_loss = compute_loss(criterion, reconstructed_images, original_images, mask)
@@ -94,18 +94,24 @@ def validate_step(
             loss = alpha * classical_loss + (1 - alpha) * inverse_loss
 
             reconstructed_images[batch == 0] = 0  # Ignore masked pixels for metrics
+            mse_val = classical_loss
+            mae_val = mae(reconstructed_images, batch)
             psnr_val = psnr(reconstructed_images, batch)
             sam_val = calculate_sam(reconstructed_images, batch)
 
             running_loss += loss.item()
+            running_mse += mse_val.item()
+            running_mae += mae_val.item()
             running_psnr += psnr_val
             running_sam += sam_val
 
     num_batches = len(dataloader)
     avg_loss = running_loss / num_batches
+    avg_mse = running_mse / num_batches
+    avg_mae = running_mae / num_batches
     avg_psnr = running_psnr / num_batches
     avg_sam = running_sam / num_batches
-    return avg_loss, avg_psnr, avg_sam
+    return avg_loss, avg_mse, avg_mae, avg_psnr, avg_sam
 
 
 def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
@@ -115,6 +121,7 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     psnr = PeakSignalNoiseRatio().to(cfg.device)
+    mae = MeanAbsoluteError().to(cfg.device)
 
     if cfg.wandb:
         wandb.watch(model, criterion, log="all", log_freq=10, log_graph=True)
@@ -123,7 +130,9 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
         train_loss, train_loss_classical, train_loss_inverse = train_step(
             model, trainloader, criterion, criterion_dual, optimizer, cfg.device, epoch
         )
-        val_loss, val_psnr, val_sam = validate_step(model, valloader, criterion, criterion_dual, psnr, cfg.device)
+        val_loss, val_mse, val_mae, val_psnr, val_sam = validate_step(
+            model, valloader, criterion, criterion_dual, psnr, mae, cfg.device
+        )
         if cfg.wandb:
             wandb.log(
                 {
@@ -131,8 +140,10 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
                     "metrics/train/MSE": train_loss_classical,
                     "metrics/train/MSE_inv": train_loss_inverse,
                     "metrics/val/MSE_dual": val_loss,
+                    "metrics/val/MSE": val_mse,
                     "metrics/val/PSNR": val_psnr,
                     "metrics/val/SAM": val_sam,
+                    "metrics/val/MAE": val_mae,
                 }
             )
         scheduler.step()
