@@ -148,5 +148,6 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
                 }
             )
         scheduler.step()
-        alpha += 0.03
+        if alpha < 1:
+            alpha += 0.03
     return model

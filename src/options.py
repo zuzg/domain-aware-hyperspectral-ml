@@ -29,12 +29,12 @@ def parse_args() -> ExperimentConfig:
     )
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--wandb", type=bool, default=True)
-    parser.add_argument("--save_model", type=bool, default=True)
-    parser.add_argument("--predict_soil", type=bool, default=False)
+    parser.add_argument("--save_model", type=bool, default=False)
+    parser.add_argument("--predict_soil", type=bool, default=True)
 
     args = parser.parse_args()
 

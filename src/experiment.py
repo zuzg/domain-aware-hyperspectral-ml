@@ -3,6 +3,7 @@ import wandb
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
+from torchinfo import summary
 
 from src.config import ExperimentConfig
 from src.consts import DATA_PATH, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_IDS, TRAIN_PATH, RENDERERS_DICT
@@ -48,13 +49,13 @@ class Experiment:
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
             HyperviewDataset(
-                TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
                 TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
-                TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
         )
 
@@ -114,16 +115,26 @@ class Experiment:
         max_values = self._load_max_values()
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
-            modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
+            modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
             modeller.load_state_dict(
                 torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth")
             )
             modeller = modeller.to(self.cfg.device)
-            predict_soil_parameters(testset, modeller, 4, self.cfg, self.ae)
+            predict_soil_parameters(testset, modeller, 5, self.cfg, self.ae)
 
         else:
             self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
             model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
+            if self.cfg.wandb:
+                modeller_summary = summary(
+                    model,
+                    input_size=(self.cfg.batch_size, self.cfg.channels, self.cfg.img_size, self.cfg.img_size),
+                )
+                with open(f"{OUTPUT_PATH}/architectures/{self.name}.txt", "w") as f:
+                    f.write(str(modeller_summary))
+                artifact = wandb.Artifact(name="Model", type="architecture")
+                artifact.add_file(local_path=f"{OUTPUT_PATH}/architectures/{self.name}.txt")
+                wandb.log_artifact(artifact)
 
             if self.cfg.dual_mode:
                 from src.train.train_loop_dual import train

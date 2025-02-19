@@ -3,6 +3,7 @@ import torch
 import wandb
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
+from torchmetrics import MeanAbsoluteError
 from torchmetrics.image import PeakSignalNoiseRatio
 from tqdm import tqdm
 
@@ -93,11 +94,11 @@ def train_step(
 
 
 def validate_step(
-    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, psnr: nn.Module, device: str
+    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, psnr: nn.Module, mae: nn.Module, device: str
 ) -> tuple[float]:
     """Run a validation step over the valloader and compute metrics."""
     model.eval()
-    running_loss = running_psnr = running_sam = 0.0
+    running_loss = running_psnr = running_sam = running_mae = 0.0
 
     with torch.no_grad():
         for batch in dataloader:
@@ -107,40 +108,45 @@ def validate_step(
 
             loss = compute_loss(criterion, pred, batch, mask)
             pred[batch == 0] = 0  # Ignore masked pixels for metrics
+            mae_val = mae(pred, batch)
             psnr_val = psnr(pred, batch)
             sam_val = calculate_sam(pred, batch)
 
             running_loss += loss.item()
+            running_mae += mae_val
             running_psnr += psnr_val
             running_sam += sam_val
 
     num_batches = len(dataloader)
     avg_loss = running_loss / num_batches
+    avg_mae = running_mae / num_batches
     avg_psnr = running_psnr / num_batches
     avg_sam = running_sam / num_batches
-    return avg_loss, avg_psnr, avg_sam
+    return avg_loss, avg_mae, avg_psnr, avg_sam
 
 
 def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
     """Train the model with given configurations."""
-    criterion = nn.MSELoss(reduction="sum")
+    criterion = nn.HuberLoss(reduction="sum")
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     psnr = PeakSignalNoiseRatio().to(cfg.device)
+    mae = MeanAbsoluteError().to(cfg.device)
 
     if cfg.wandb:
         wandb.watch(model, criterion, log="all", log_freq=10, log_graph=True)
 
     for epoch in range(cfg.epochs):
         train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
-        val_loss, val_psnr, val_sam = validate_step(model, valloader, criterion, psnr, cfg.device)
+        val_loss, val_mae, val_psnr, val_sam = validate_step(model, valloader, criterion, psnr, mae, cfg.device)
         if cfg.wandb:
             wandb.log(
                 {
-                    "metrics/train/MSE": train_loss,
-                    "metrics/val/MSE": val_loss,
+                    "metrics/train/Huber": train_loss,
+                    "metrics/val/Huber": val_loss,
                     "metrics/val/PSNR": val_psnr,
                     "metrics/val/SAM": val_sam,
+                    "metrics/val/MAE": val_mae,
                 }
             )
         scheduler.step()

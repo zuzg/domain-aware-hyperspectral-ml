@@ -20,7 +20,7 @@ class GaussianSkewRenderer(BaseRenderer):
                 batch[idx, :, 0, ...],  # mu
                 batch[idx, :, 1, ...],  # sigma
                 batch[idx, :, 2, ...],  # scale
-                batch[idx, :, 4, ...]   # skew
+                batch[idx, :, 4, ...],  # skew
             )
             pixel_dist = torch.sum(dists, dim=0)
             rendered_frame = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]  # Add bias

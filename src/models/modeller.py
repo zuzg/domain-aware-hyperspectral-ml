@@ -19,44 +19,49 @@ class Modeller(nn.Module):
         channels: int,
         k: int,
         num_params: int,
-        multi_mu: bool = True,
+        multi_mu: bool = False,
     ):
         super().__init__()
         self.k = k
         self.size = img_size
         self.num_params = num_params
         self.multi_mu = multi_mu
-        self.relu = nn.LeakyReLU()
-        self.sigmoid = nn.Sigmoid()
-        self.tanh = nn.Tanh()
-        self.softmax = nn.Softmax(dim=1)
-        self.conv1 = nn.Conv2d(channels, 64, kernel_size=1)
-        nn.init.xavier_uniform_(self.conv1.weight, gain=nn.init.calculate_gain("relu"))
-        self.conv2 = nn.Conv2d(64, 64, kernel_size=1)
-        nn.init.xavier_uniform_(self.conv2.weight, gain=nn.init.calculate_gain("relu"))
-
         if multi_mu:
             self.num_params += 3
+            self.softmax = nn.Softmax(dim=1)
 
-        self.conv3 = nn.Conv2d(64, self.num_params * self.k, kernel_size=1)
-        nn.init.xavier_uniform_(self.conv3.weight, gain=nn.init.calculate_gain("sigmoid"))
+        self.conv1 = nn.Conv2d(channels, 256, kernel_size=1)
+        self.lrelu1 = nn.LeakyReLU()
+        # self.norm1 = nn.BatchNorm2d(256)
+        self.conv2 = nn.Conv2d(256, 128, kernel_size=1)
+        self.lrelu2 = nn.LeakyReLU()
+        # self.norm2 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(128, 64, kernel_size=1)
+        self.lrelu3 = nn.LeakyReLU()
+        # self.norm2 = nn.BatchNorm2d(128)
+        self.conv4 = nn.Conv2d(64, self.num_params * self.k, kernel_size=1)
+        # self.norm4 = nn.BatchNorm2d(self.num_params * self.k, momentum=0.05)
+        self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
+
+        nn.init.xavier_uniform_(self.conv1.weight, gain=nn.init.calculate_gain("leaky_relu"))
+        nn.init.xavier_uniform_(self.conv2.weight, gain=nn.init.calculate_gain("leaky_relu"))
 
     def forward(self, x: Tensor) -> Tensor:
-        x = self.relu(self.conv1(x))
-        x = self.relu(self.conv2(x))
-        x = self.conv3(x)
+        x = self.lrelu1(self.conv1(x))
+        x = self.lrelu2(self.conv2(x))
+        x = self.lrelu3(self.conv3(x))
+        x = self.conv4(x)
         x = x.view(x.shape[0], self.k, self.num_params, self.size, self.size)
         if self.num_params > 3:
             if self.multi_mu:
                 x[:, :, 3:4] = calculate_mu(self.softmax(x[:, :, :4]))
                 x[:, :, 4:5] = self.sigmoid(x[:, :, 4:5])  # std
                 x[:, :, 5:] = self.tanh(x[:, :, 5:])  # scale, shift, skew
-                # delete first two dimensions
-                x = x[:, :, 3:]
+                x = x[:, :, 3:]  # delete first two dimensions
             else:
-                x[:, :, :2] = self.sigmoid(x[:, :, :2])
-                x[:, :, 2:] = self.tanh(x[:, :, 2:])
+                x[:, :, :2] = self.sigmoid(x[:, :, :2])  # mu, std
+                x[:, :, 2:] = self.tanh(x[:, :, 2:])  # scale, shift, skew
         else:
-            x = self.tanh(x)
-            # TODO relu for beta dist
+            x = self.tanh(x)  # TODO relu for beta dist
         return x

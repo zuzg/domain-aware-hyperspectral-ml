@@ -18,8 +18,8 @@ def apply_non_baseline_mask(pred: np.ndarray, mask: np.ndarray, k: int, num_para
         expanded_mask = np.expand_dims(mask, axis=1)
         crop_mask = np.repeat(expanded_mask, repeats=k * num_params, axis=1)
     else:
-        shift = pred[:, 0, num_params - 1 :]
-        pred[:, :, num_params - 1] = shift
+        shift = pred[:, 0, num_params - 2 : num_params - 1]
+        pred[:, :, num_params - 2] = shift
         expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
         crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
     return np.where(crop_mask == 0, pred, 0)
@@ -47,15 +47,17 @@ def prepare_datasets(
             data = data.to(device)
             pred = model(data)
             pred = pred.cpu().detach().numpy()
-            data = data.cpu().detach().numpy()
-            shift = pred[:,0,num_params - 1:]
-            pred[:,:, num_params - 1] = shift
             masked_pred = apply_non_baseline_mask(pred, mask, k, num_params, ae)
         features.append(masked_pred)
 
     features = np.array(features)
+    # sort by mu
+    sort_key = features[:, :, :, 0, :, :]
+    sort_indices = np.argsort(sort_key, axis=2)
+    sorted_features = np.take_along_axis(features, np.expand_dims(sort_indices, axis=3), axis=2)
+
     f_dim = channels if baseline else k * num_params
-    return features.reshape(features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1])
+    return sorted_features.reshape(features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1])
 
 
 def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
@@ -64,6 +66,7 @@ def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
     gt = gt.drop(["sample_index"], axis=1)
     gt = gt.reset_index(drop=True)
     return gt
+
 
 class SoilDataset(Dataset):
     def __init__(
