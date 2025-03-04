@@ -25,7 +25,7 @@ class HyperviewDataset(Dataset):
         self.mask = mask
         self.bias = self.load_bias(bias_path)
         self.images = self.load_images(directory)
-        self.transform = transforms.Compose([transforms.CenterCrop(size), transforms.Normalize(mean, std)])
+        self.transform = transforms.Compose([transforms.Normalize(mean, std)])
 
     def __len__(self) -> int:
         return len(self.images)

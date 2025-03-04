@@ -7,6 +7,18 @@ from src.consts import GT_PATH
 from src.models.modeller import Modeller
 
 
+def collate_fn_pad(batch):
+    max_h = 300  # max(img.shape[1] for img in batch)  # Find max height in batch
+    max_w = 300  # max(img.shape[2] for img in batch)  # Find max width in batch
+
+    padded_batch = []
+    for img in batch:
+        padded_img = torch.nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))  # Pad to max size
+        padded_batch.append(padded_img)
+
+    return torch.stack(padded_batch)  # Stack into a single tensor
+
+
 def apply_baseline_mask(data: np.ndarray, mask: np.ndarray, channels: int) -> np.ndarray:
     expanded_mask = np.expand_dims(mask, axis=1)
     crop_mask = np.repeat(expanded_mask, repeats=channels, axis=1)
@@ -36,7 +48,7 @@ def prepare_datasets(
     ae: bool = False,
     baseline: bool = False,
 ) -> np.ndarray:
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collate_fn_pad)
     features = []
     model.eval()
     for data in dataloader:

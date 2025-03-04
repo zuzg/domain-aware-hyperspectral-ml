@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
 
-from src.consts import GT_DIM, GT_NAMES, MAX_PATH, TEST_IDS
+from src.consts import GT_DIM, GT_NAMES, MAX_PATH, MEAN_PATH, TEST_IDS
 from src.data.dataset import HyperviewDataset
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets
@@ -32,11 +32,11 @@ def parse_args() -> PredictionConfig:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="data/hyperview/test_data")
     parser.add_argument(
-        "--modeller_path", type=str, default="output/models/modeller_var=GaussianRenderer_bias=Mean_k=5_15_group.pth"
+        "--modeller_path", type=str, default="output/models/modeller_var=GaussianSkewRenderer_bias=Mean_k=5_20.pth"
     )
     parser.add_argument("--regressor_path", type=str, default="output/models/xgb_5.pickle")
     parser.add_argument("--single_model", type=bool, default=True)
-    parser.add_argument("--img_size", type=int, default=100)
+    parser.add_argument("--img_size", type=int, default=200)
     parser.add_argument("--channels", type=int, default=150)
     parser.add_argument("--max_val", type=int, default=6000)
     parser.add_argument("--k", type=int, default=5)
@@ -58,7 +58,7 @@ class Prediction:
         self.cfg = cfg
 
     def run(self) -> None:
-        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 4)
+        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
         modeller.load_state_dict(torch.load(self.cfg.modeller_path))
         modeller.to(self.cfg.device)
 
@@ -66,8 +66,8 @@ class Prediction:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
-        dataset = HyperviewDataset(self.cfg.dataset_path, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True)
-        features = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, GT_DIM, self.cfg.batch_size, self.cfg.device)
+        dataset = HyperviewDataset(self.cfg.dataset_path, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH)
+        features = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, 5, self.cfg.batch_size, self.cfg.device)
         features_agg = np.sum(features, axis=(2, 3)) / np.count_nonzero(features, axis=(2, 3))
 
         with open(self.cfg.regressor_path, "rb") as f:
@@ -75,7 +75,7 @@ class Prediction:
 
         preds = predict_params(regressor, features_agg)
         submission = pd.DataFrame(data=preds, columns=GT_NAMES)
-        submission.to_csv("output/submission_ml_grouped.csv", index_label="sample_index")
+        submission.to_csv("output/submissions/submission_full_res.csv", index_label="sample_index")
 
 
 def main() -> None:

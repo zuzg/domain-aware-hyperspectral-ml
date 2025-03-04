@@ -1,7 +1,7 @@
 import numpy as np
 import wandb
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset
 from torchinfo import summary
 
@@ -15,6 +15,18 @@ from src.models.bias_variance_model import BiasModel, BiasVarianceModel, Varianc
 from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
 from soil_params.pred_ml import predict_soil_parameters
+
+
+def collate_fn_pad(batch: Tensor):
+    max_h = max(img.shape[1] for img in batch)  # Find max height in batch
+    max_w = max(img.shape[2] for img in batch)  # Find max width in batch
+
+    padded_batch = []
+    for img in batch:
+        padded_img = nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))  # Pad to max size
+        padded_batch.append(padded_img)
+
+    return torch.stack(padded_batch)  # Stack into a single tensor
 
 
 class Experiment:
@@ -49,21 +61,21 @@ class Experiment:
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
             HyperviewDataset(
-                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
                 TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
-                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
         )
 
     def prepare_dataloaders(self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
         return (
-            DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, drop_last=True),
-            DataLoader(valset, batch_size=self.cfg.batch_size, drop_last=True),
-            DataLoader(testset, batch_size=self.cfg.batch_size, drop_last=True),
+            DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True),
+            DataLoader(valset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True),
+            DataLoader(testset, batch_size=self.cfg.batch_size, collate_fn=collate_fn_pad, drop_last=True),
         )
 
     def _load_max_values(self) -> np.ndarray:
@@ -117,7 +129,7 @@ class Experiment:
         if not self.cfg.save_model:
             modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
             modeller.load_state_dict(
-                torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth")
+                torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}.pth")
             )
             modeller = modeller.to(self.cfg.device)
             predict_soil_parameters(testset, modeller, 5, self.cfg, self.ae)
@@ -145,7 +157,7 @@ class Experiment:
 
             modeller = model.encoder if self.ae else model.modeller
             torch.save(
-                modeller.state_dict(), OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}_group.pth"
+                modeller.state_dict(), OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}.pth"
             )
 
             if self.cfg.wandb:
