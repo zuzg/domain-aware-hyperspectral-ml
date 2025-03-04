@@ -35,7 +35,6 @@ class Evaluator:
         return self.model.modeller, self.model.renderer, None
 
     def evaluate(self, testloader: DataLoader) -> None:
-        self.modeller.eval()
         imgs, renders, raw_outputs, params = self._process_testloader(testloader)
         self._plot_results(imgs, renders, raw_outputs)
         plot_param_stats(params)
@@ -43,23 +42,24 @@ class Evaluator:
     def _process_testloader(self, testloader: DataLoader) -> tuple[list[Tensor]]:
         imgs, renders, raw_outputs = [], [], []
         params = []
+        self.modeller.eval()
         with torch.no_grad():
             for img in testloader:
                 img = img.to(self.cfg.device)
                 out = self.modeller(img)
-                flattened = out.permute(0, 1, 3, 4, 2).reshape(-1, 4)
+                flattened = out.permute(0, 1, 3, 4, 2).reshape(-1, 4).cpu().detach()
 
                 # Randomly sample 10,000 points along the third axis
                 indices = torch.randint(0, flattened.size(0), (1000,))  # Generate random indices
                 samples = flattened[indices]
-                params.extend(samples.cpu())
+                params.extend(samples)
                 # params.append(torch.mean(out, dim=(0, 1, 3, 4)).cpu())
                 # params.append(torch.amax(out, dim=(0, 1, 3, 4)).cpu())
                 # params.append(torch.amin(out, dim=(0, 1, 3, 4)).cpu())
                 render = self._apply_rendering(out)
                 imgs.append(img)
-                renders.append(render)
-                raw_outputs.append(out)
+                renders.append(render.cpu().detach())
+                raw_outputs.append(out.cpu().detach())
         params_stacked = torch.stack(params, dim=0) * torch.tensor(
             [self.cfg.channels, self.cfg.channels, self.cfg.channels, 1]
         )
@@ -83,20 +83,20 @@ class Evaluator:
             ids = [1, 8, 10]
             mask_nan = True
         for i in ids:
-            self._plot_image_comparisons(imgs[i][i].cpu(), renders[i][i].cpu(), mask_nan)
+            self._plot_image_comparisons(imgs[i][i].cpu(), renders[i][i].cpu(), mask_nan, i)
             self._plot_variance_renderer(raw_outputs[i][i] if not self.ae else None, i)
         self._plot_bias()
         if self.cfg.dual_mode:
             self.dual_mode()
 
-    def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor, mask_nan: bool) -> None:
+    def _plot_image_comparisons(self, gt_img: Tensor, pred_img: Tensor, mask_nan: bool, i) -> None:
         plot_images(gt_img.numpy(), pred_img.numpy(), mask_nan, "images")
         plot_images(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, mask_nan, "images without bias")
         plot_average_reflectance(gt_img.numpy(), pred_img.numpy(), "reflectance without bias")
         plot_average_reflectance(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, "reflectance")
-        img_center = 0  # gt_img.shape[1] // 2
-        plot_pixelwise(gt_img.numpy(), pred_img.numpy(), img_center, "pixelwise without bias")
-        plot_pixelwise(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, img_center, "pixelwise")
+        img_center = gt_img.shape[1] // 2
+        plot_pixelwise(gt_img.numpy(), pred_img.numpy(), img_center, "pixelwise without bias", i)
+        plot_pixelwise(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, img_center, "pixelwise", i)
 
     def _plot_variance_renderer(self, raw_output: Tensor, idx: int) -> None:
         if self.ae or raw_output is None:
@@ -111,7 +111,7 @@ class Evaluator:
         elif renderer_type == "GaussianAsymmetricRenderer":
             plot_partial_hats_asymmetric(center_slice, self.cfg.mu_type, self.cfg.channels)
         elif renderer_type == "GaussianSkewRenderer":
-            plot_partial_hats_skew(center_slice, self.cfg.mu_type, self.cfg.channels)
+            plot_partial_hats_skew(center_slice, self.cfg.mu_type, self.cfg.channels, idx)
         elif renderer_type == "PolynomialRenderer":
             plot_partial_polynomials(center_slice, self.cfg.channels)
         elif renderer_type == "PolynomialDegreeRenderer":
