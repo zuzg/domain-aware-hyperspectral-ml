@@ -215,5 +215,5 @@ def plot_param_stats(stats: Tensor) -> None:
     fig.update_layout(
         xaxis=dict(tickmode="array", tickvals=[0, 1, 2, 3], ticktext=ticks),  # change 1
     )
-    fig.write_html("stats.html")
+    fig.write_html("output/stats.html")
     wandb.log({"Hat stats": fig})
