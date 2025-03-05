@@ -1,12 +1,21 @@
 import numpy as np
-import wandb
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 from torchinfo import summary
 
+import wandb
+from soil_params.pred_ml import predict_soil_parameters
 from src.config import ExperimentConfig
-from src.consts import DATA_PATH, MAX_PATH, MEAN_PATH, OUTPUT_PATH, SPLIT_RATIO, TRAIN_IDS, TRAIN_PATH, RENDERERS_DICT
+from src.consts import (
+    MAX_PATH,
+    MEAN_PATH,
+    OUTPUT_PATH,
+    RENDERERS_DICT,
+    SPLIT_RATIO,
+    TRAIN_IDS,
+    TRAIN_PATH,
+)
 from src.data.dataset import HyperviewDataset
 from src.data.preprocessing import mean_path_to_bias
 from src.eval.eval_loop import Evaluator
@@ -14,7 +23,6 @@ from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
-from soil_params.pred_ml import predict_soil_parameters
 
 
 def collate_fn_pad(batch: Tensor):
@@ -34,26 +42,24 @@ class Experiment:
         self.cfg = cfg
         self.ae = self.cfg.variance_renderer == "Autoencoder"
         if self.cfg.wandb:
-            self.name, self.tags = self._set_experiment_name_and_tags()
+            self.name = self._set_experiment_name()
             self._initialize_wandb()
 
-    def _set_experiment_name_and_tags(self) -> tuple[str, list[str]]:
+    def _set_experiment_name(self) -> str:
         if self.ae:
             return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
         if self.cfg.dual_mode:
             pre = "[DUAL]"
         else:
             pre = ""
-        return pre + f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}", [
-            f"μ: {self.cfg.mu_type}",
-        ]
+        return pre + f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}"
 
     def _initialize_wandb(self) -> None:
         wandb.init(
             project="hyperview",
             name=self.name,
             config=vars(self.cfg),
-            tags=self.tags,
+            tags=self.cfg.tags,
         )
 
     def prepare_datasets(self, div: np.ndarray) -> tuple[Dataset]:
@@ -129,7 +135,7 @@ class Experiment:
         if not self.cfg.save_model:
             modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
             modeller.load_state_dict(
-                torch.load(OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}.pth")
+                torch.load(self.cfg.modeller_path)
             )
             modeller = modeller.to(self.cfg.device)
             predict_soil_parameters(testset, modeller, 5, self.cfg, self.ae)
@@ -157,7 +163,7 @@ class Experiment:
 
             modeller = model.encoder if self.ae else model.modeller
             torch.save(
-                modeller.state_dict(), OUTPUT_PATH / "models" / f"modeller_{self.name}_{self.cfg.epochs}.pth"
+                modeller.state_dict(), self.cfg.modeller_path
             )
 
             if self.cfg.wandb:

@@ -1,50 +1,16 @@
-import argparse
 import pickle
-from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
 
-from src.consts import GT_DIM, GT_NAMES, MAX_PATH, MEAN_PATH, TEST_IDS
+from src.config import ExperimentConfig
+from src.consts import GT_NAMES, MAX_PATH, MEAN_PATH, TEST_IDS, TEST_PATH
 from src.data.dataset import HyperviewDataset
 from src.models.modeller import Modeller
+from src.options import parse_args
 from src.soil_params.data import prepare_datasets
-
-
-@dataclass
-class PredictionConfig:
-    dataset_path: Path | str
-    modeller_path: Path | str
-    regressor_path: Path | str
-    single_model: bool
-    img_size: int
-    channels: int
-    max_val: int
-    k: int
-    batch_size: int
-    device: str
-
-
-def parse_args() -> PredictionConfig:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset_path", type=str, default="data/hyperview/test_data")
-    parser.add_argument(
-        "--modeller_path", type=str, default="output/models/modeller_var=GaussianSkewRenderer_bias=Mean_k=5_20.pth"
-    )
-    parser.add_argument("--regressor_path", type=str, default="output/models/xgb_5.pickle")
-    parser.add_argument("--single_model", type=bool, default=True)
-    parser.add_argument("--img_size", type=int, default=200)
-    parser.add_argument("--channels", type=int, default=150)
-    parser.add_argument("--max_val", type=int, default=6000)
-    parser.add_argument("--k", type=int, default=5)
-    parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--device", type=str, default="cuda")
-    args = parser.parse_args()
-    cfg = PredictionConfig(**vars(args))
-    return cfg
 
 
 def predict_params(
@@ -54,7 +20,7 @@ def predict_params(
 
 
 class Prediction:
-    def __init__(self, cfg: PredictionConfig) -> None:
+    def __init__(self, cfg: ExperimentConfig) -> None:
         self.cfg = cfg
 
     def run(self) -> None:
@@ -66,16 +32,16 @@ class Prediction:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
-        dataset = HyperviewDataset(self.cfg.dataset_path, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH)
+        dataset = HyperviewDataset(TEST_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH)
         features = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, 5, self.cfg.batch_size, self.cfg.device)
         features_agg = np.sum(features, axis=(2, 3)) / np.count_nonzero(features, axis=(2, 3))
 
-        with open(self.cfg.regressor_path, "rb") as f:
+        with open(self.cfg.predictor_path, "rb") as f:
             regressor = pickle.load(f)
 
         preds = predict_params(regressor, features_agg)
         submission = pd.DataFrame(data=preds, columns=GT_NAMES)
-        submission.to_csv("output/submissions/submission_full_res.csv", index_label="sample_index")
+        submission.to_csv(self.cfg.submission_path, index_label="sample_index")
 
 
 def main() -> None:

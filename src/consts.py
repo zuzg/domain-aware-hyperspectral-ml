@@ -3,18 +3,18 @@ from pathlib import Path
 from src.config import RendererConfig
 from src.models.autoencoder import Autoencoder
 from src.models.renderers.beta_renderer import BetaRenderer
-from src.models.renderers.gaussian_renderer import GaussianRenderer
 from src.models.renderers.gaussian_asymmetric_renderer import GaussianAsymmetricRenderer
+from src.models.renderers.gaussian_renderer import GaussianRenderer
 from src.models.renderers.gaussian_skew_renderer import GaussianSkewRenderer
 from src.models.renderers.polynomial_degree_renderer import PolynomialDegreeRenderer
 from src.models.renderers.polynomial_renderer import PolynomialRenderer
 from src.models.renderers.spline_renderer import SplineRenderer
 
-
 # paths
 DATA_PATH: Path = Path("data/hyperview")
 OUTPUT_PATH: Path = Path("output")
 TRAIN_PATH: Path = DATA_PATH / "train_data/train_data"
+TEST_PATH: Path = DATA_PATH / "test_data"
 GT_PATH: Path = DATA_PATH / "train_data/train_gt.csv"
 STATS_PATH: Path = DATA_PATH / "stats"
 MAX_PATH: Path = STATS_PATH / "max_c_masked.npy"

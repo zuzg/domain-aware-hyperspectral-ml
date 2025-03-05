@@ -1,24 +1,23 @@
 import pickle
 
 import numpy as np
-import wandb
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
 from sklearn.multioutput import MultiOutputRegressor
 from torch.utils.data import Dataset
 from xgboost import XGBRegressor
 
+import wandb
 from src.config import ExperimentConfig
 from src.consts import MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH
 from src.models.modeller import Modeller
 from src.soil_params.data import prepare_datasets, prepare_gt
 
 
-def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray, save_model: bool=False) -> np.ndarray:
+def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray, model_path: str, save_model: bool=False) -> np.ndarray:
     model = MultiOutputRegressor(XGBRegressor(n_estimators=100, learning_rate=1e-2))
     model.fit(x_train, y_train)
     if save_model:
-        with open("output/models/xgb_5.pickle", "wb") as f:
+        with open(model_path, "wb") as f:
             pickle.dump(model, f)
 
     preds = model.predict(x_test)
@@ -27,7 +26,7 @@ def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray,
 
 
 def samples_number_experiment(
-    x: np.ndarray, y: np.ndarray, sample_nums: list[int], n_runs: int = 1
+    x: np.ndarray, y: np.ndarray, sample_nums: list[int], model_path: str, n_runs: int = 1, 
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     mses_mean = []
     mses_std = []
@@ -43,7 +42,7 @@ def samples_number_experiment(
             # x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
             # x_train, y_train = x_train_base[:sn], y_train_base[:sn]
 
-            mse = predict_params(x, x, y, y, save_model)
+            mse = predict_params(x, x, y, y, model_path, save_model)
             save_model = False
             print(mse)
             mses_for_sample.append(mse / [MSE_BASE_P, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_PH])
@@ -77,4 +76,4 @@ def predict_soil_parameters(
     gt = prepare_gt(dataset.ids)
     gt = gt[:1728]
     samples  = [1728]# [500, 250, 200, 150, 100, 50, 25, 10]
-    mses_mean_pred, mses_std_pred = samples_number_experiment(preds_agg, gt, samples)
+    mses_mean_pred, mses_std_pred = samples_number_experiment(preds_agg, gt, samples, cfg.predictor_path)
