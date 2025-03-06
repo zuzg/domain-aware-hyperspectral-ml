@@ -52,7 +52,9 @@ class Modeller(nn.Module):
         x = self.lrelu2(self.conv2(x))
         x = self.lrelu3(self.conv3(x))
         x = self.conv4(x)
-        x = x.view(x.shape[0], self.k, self.num_params, self.size, self.size)
+        # x = x.view(x.shape[0], self.k, self.num_params, self.size, self.size)
+        _, _, h, w = x.shape
+        x = x.view(x.shape[0], self.k, self.num_params, h, w)
         if self.num_params > 3:
             if self.multi_mu:
                 x[:, :, 3:4] = calculate_mu(self.softmax(x[:, :, :4]))

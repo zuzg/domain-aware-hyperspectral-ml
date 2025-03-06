@@ -13,11 +13,12 @@ class Args:
     @classmethod
     def from_cli(cls) -> "Args":
         parser = argparse.ArgumentParser()
-        parser.add_argument("--config_path", type=str, default="configs/dummy.yaml")
+        parser.add_argument("--model_config", type=str, default="configs/dummy.yaml")
         args = parser.parse_args()
         return Args(
             model_config=args.model_config,
         )
+
 
 def parse_args() -> ExperimentConfig:
     args = Args.from_cli()
