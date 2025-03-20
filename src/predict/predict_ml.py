@@ -10,7 +10,7 @@ from src.consts import GT_NAMES, MAX_PATH, MEAN_PATH, TEST_IDS, TEST_PATH
 from src.data.dataset import HyperviewDataset
 from src.models.modeller import Modeller
 from src.options import parse_args
-from src.soil_params.data import prepare_datasets
+from src.soil_params.data import aggregate_features, prepare_datasets
 
 
 def predict_params(
@@ -33,13 +33,13 @@ class Prediction:
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
         dataset = HyperviewDataset(TEST_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH)
-        features = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, 5, self.cfg.batch_size, self.cfg.device)
-        features_agg = np.sum(features, axis=(2, 3)) / np.count_nonzero(features, axis=(2, 3))
+        preds = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, 5, 1, self.cfg.device)
+        preds_agg = aggregate_features(preds)
 
         with open(self.cfg.predictor_path, "rb") as f:
             regressor = pickle.load(f)
 
-        preds = predict_params(regressor, features_agg)
+        preds = predict_params(regressor, preds_agg)
         submission = pd.DataFrame(data=preds, columns=GT_NAMES)
         submission.to_csv(self.cfg.submission_path, index_label="sample_index")
 

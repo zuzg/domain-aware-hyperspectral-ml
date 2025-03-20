@@ -128,7 +128,7 @@ def validate_step(
 def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
     """Train the model with given configurations."""
     criterion = nn.HuberLoss(reduction="sum")
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     psnr = PeakSignalNoiseRatio().to(cfg.device)
     mae = MeanAbsoluteError().to(cfg.device)

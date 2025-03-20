@@ -30,31 +30,36 @@ class Modeller(nn.Module):
             self.num_params += 3
             self.softmax = nn.Softmax(dim=1)
 
-        self.conv1 = nn.Conv2d(channels, 256, kernel_size=1)
-        self.lrelu1 = nn.LeakyReLU()
+        self.conv1 = nn.Conv2d(channels, 512, kernel_size=1)
+        self.lrelu1 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
         # self.norm1 = nn.BatchNorm2d(256)
-        self.conv2 = nn.Conv2d(256, 128, kernel_size=1)
-        self.lrelu2 = nn.LeakyReLU()
+        self.conv2 = nn.Conv2d(512, 1024, kernel_size=1)
+        self.lrelu2 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
         # self.norm2 = nn.BatchNorm2d(128)
-        self.conv3 = nn.Conv2d(128, 64, kernel_size=1)
-        self.lrelu3 = nn.LeakyReLU()
+        self.conv3 = nn.Conv2d(1024, 512, kernel_size=1)
+        self.lrelu3 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
         # self.norm2 = nn.BatchNorm2d(128)
-        self.conv4 = nn.Conv2d(64, self.num_params * self.k, kernel_size=1)
-        # self.norm4 = nn.BatchNorm2d(self.num_params * self.k, momentum=0.05)
+        self.conv4 = nn.Conv2d(512, 256, kernel_size=1)
+        self.lrelu4 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
+        self.conv5 = nn.Conv2d(256, self.num_params * self.k, kernel_size=1)
+        # self.norm = nn.BatchNorm2d(self.num_params * self.k, momentum=0.1)
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
 
         nn.init.xavier_uniform_(self.conv1.weight, gain=nn.init.calculate_gain("leaky_relu"))
         nn.init.xavier_uniform_(self.conv2.weight, gain=nn.init.calculate_gain("leaky_relu"))
+        nn.init.xavier_uniform_(self.conv3.weight, gain=nn.init.calculate_gain("leaky_relu"))
+        nn.init.xavier_uniform_(self.conv4.weight, gain=nn.init.calculate_gain("leaky_relu"))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.lrelu1(self.conv1(x))
         x = self.lrelu2(self.conv2(x))
         x = self.lrelu3(self.conv3(x))
-        x = self.conv4(x)
+        x = self.lrelu4(self.conv4(x))
+        x = self.conv5(x)
         # x = x.view(x.shape[0], self.k, self.num_params, self.size, self.size)
         _, _, h, w = x.shape
-        x = x.view(x.shape[0], self.k, self.num_params, h, w)
+        x = x.view(x.shape[0], self.k, self.num_params, h, w)  # Use h, w dynamically
         if self.num_params > 3:
             if self.multi_mu:
                 x[:, :, 3:4] = calculate_mu(self.softmax(x[:, :, :4]))

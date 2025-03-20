@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
+from scipy.stats import kurtosis, skew
 from torch.utils.data import DataLoader, Dataset
 
 from src.consts import GT_PATH
@@ -78,6 +79,22 @@ def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
     gt = gt.drop(["sample_index"], axis=1)
     gt = gt.reset_index(drop=True)
     return gt
+
+
+def aggregate_features(features: np.ndarray) -> np.ndarray:
+    features[features == 0] = np.nan
+    preds_mean = np.nanmean(features, axis=(2, 3))
+    preds_max = np.nanmax(features, axis=(2, 3))
+    preds_var = np.nanvar(features, axis=(2, 3))
+    preds_min = np.nanmin(features, axis=(2, 3))
+    # preds_median = np.nanmedian(features, axis=(2, 3))
+    # preds_skew = skew(features, axis=(2, 3), nan_policy="omit")
+    # preds_kurt = kurtosis(features, axis=(2, 3), nan_policy="omit")
+    # q75, q25 = np.nanpercentile(features, [75, 25], axis=(2, 3))
+    # preds_iqr = q75 - q25
+
+    features_agg = np.concatenate([preds_mean, preds_max, preds_var, preds_min], axis=1)#, preds_median, preds_skew, preds_kurt, preds_iqr], axis=1)
+    return features_agg
 
 
 class SoilDataset(Dataset):

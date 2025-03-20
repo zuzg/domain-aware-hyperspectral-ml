@@ -94,7 +94,7 @@ class Evaluator:
         plot_images(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, mask_nan, "images without bias")
         plot_average_reflectance(gt_img.numpy(), pred_img.numpy(), "reflectance without bias")
         plot_average_reflectance(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, "reflectance")
-        img_center = gt_img.shape[1] // 2
+        img_center = 0
         plot_pixelwise(gt_img.numpy(), pred_img.numpy(), img_center, "pixelwise without bias", i)
         plot_pixelwise(gt_img.numpy() + self.bias, pred_img.numpy() + self.bias, img_center, "pixelwise", i)
 
