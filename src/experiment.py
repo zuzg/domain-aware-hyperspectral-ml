@@ -5,9 +5,10 @@ from torch.utils.data import DataLoader, Dataset
 from torchinfo import summary
 
 import wandb
-from soil_params.pred_ml import predict_soil_parameters
+from soil_params.end_to_end import predict_soil_parameters
 from src.config import ExperimentConfig
 from src.consts import (
+    DATA_PATH,
     MAX_PATH,
     MEAN_PATH,
     OUTPUT_PATH,
@@ -67,13 +68,13 @@ class Experiment:
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
             HyperviewDataset(
-                TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                DATA_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
-                TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
-                TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
         )
 
