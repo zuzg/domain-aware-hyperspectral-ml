@@ -1,23 +1,17 @@
 import numpy as np
 import torch
 import wandb
-from torch import nn, Tensor
+from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
 from src.consts import GT_DIM, GT_MAX, GT_NAMES, MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH, OUTPUT_PATH
 from src.models.modeller import Modeller
+from src.models.soil_predictor import MultiRegressionCNN
 from src.soil_params.data import prepare_datasets, prepare_gt, SoilDataset
+from src.soil_params.utils import compute_masks
 from src.soil_params.visualizations import visualize_distribution
-
-
-def compute_masks(img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor) -> tuple[Tensor]:
-    expanded_mask = mask.unsqueeze(1)
-    crop_mask = expanded_mask.expand(-1, gt.shape[1], -1, -1)
-    masked_gt = torch.where(crop_mask == 0, gt, torch.zeros_like(gt))
-    masked_pred = torch.where(crop_mask == 0, img, torch.zeros_like(img))
-    return masked_gt * gt_div_tensor, masked_pred * gt_div_tensor
 
 
 def predict_params(
@@ -25,7 +19,8 @@ def predict_params(
 ) -> np.ndarray:
     if save_model:
         param = gt_div[0]
-    else: param = None
+    else:
+        param = None
     model = train(trainloader, features=f_dim, out_dim=len(gt_div), param=param)
     if save_model:
         torch.save(model.state_dict(), OUTPUT_PATH / "models" / f"regressor_full_single.pth")
@@ -88,7 +83,7 @@ def samples_number_experiment(
         mses_sample_mean = mses_for_sample.mean(axis=0)
         mses_mean.append(mses_sample_mean)
         if len(gt_div) == 1:
-            wandb.log( 
+            wandb.log(
                 {
                     "soil/step": -sn,
                     f"soil/{param}": mses_sample_mean[0],
@@ -107,31 +102,9 @@ def samples_number_experiment(
             )
 
 
-class MultiRegressionCNN(nn.Module):
-    def __init__(self, input_channels: int, output_channels: int = GT_DIM):
-        """
-        CNN for hyperspectral image regression, outputting n continuous values per pixel.
-        """
-        super().__init__()
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(32),
-            nn.Conv2d(32, 32, kernel_size=1),
-            nn.ReLU(),
-            # nn.BatchNorm2d(64),
-            # nn.Conv2d(64, 32, kernel_size=1),
-            # nn.ReLU(),
-        )
-        self.output_layer = nn.Conv2d(32, output_channels, kernel_size=1)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.conv_layers(x)
-        output = self.output_layer(x)
-        return output
-
-
-def train(dataloader: DataLoader, features: int = 150, out_dim: int = GT_DIM, epochs: int = 15, param: str = "") -> nn.Module:
+def train(
+    dataloader: DataLoader, features: int = 150, out_dim: int = GT_DIM, epochs: int = 15, param: str = ""
+) -> nn.Module:
     model = MultiRegressionCNN(input_channels=features, output_channels=out_dim)
     model = model.to("cuda")
     criterion = nn.MSELoss(reduction="sum")
@@ -167,7 +140,9 @@ def predict_soil_parameters(
     single_model: bool = True,
     baseline: bool = False,
 ) -> None:
-    features = prepare_datasets(dataset, model, cfg.k, cfg.channels, num_params, cfg.batch_size, cfg.device, ae, baseline)
+    features = prepare_datasets(
+        dataset, model, cfg.k, cfg.channels, num_params, cfg.batch_size, cfg.device, ae, baseline
+    )
     gt = prepare_gt(dataset.ids)
     samples = [1728]  # , 250, 200, 150, 100, 50, 25, 10]
     f_dim = cfg.channels if baseline else cfg.k * num_params

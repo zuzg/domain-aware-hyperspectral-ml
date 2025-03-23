@@ -1,16 +1,20 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import torch
 from scipy.stats import kurtosis, skew
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
 
-from src.consts import GT_PATH
+from src.consts import GT_PATH, MEAN_PATH
 from src.models.modeller import Modeller
 
 
 def collate_fn_pad(batch):
-    max_h = 300  # max(img.shape[1] for img in batch)  # Find max height in batch
-    max_w = 300  # max(img.shape[2] for img in batch)  # Find max width in batch
+    max_h = 200  # max(img.shape[1] for img in batch)  # Find max height in batch
+    max_w = 200  # max(img.shape[2] for img in batch)  # Find max width in batch
 
     padded_batch = []
     for img in batch:
@@ -93,7 +97,9 @@ def aggregate_features(features: np.ndarray) -> np.ndarray:
     # q75, q25 = np.nanpercentile(features, [75, 25], axis=(2, 3))
     # preds_iqr = q75 - q25
 
-    features_agg = np.concatenate([preds_mean, preds_max, preds_var, preds_min], axis=1)#, preds_median, preds_skew, preds_kurt, preds_iqr], axis=1)
+    features_agg = np.concatenate(
+        [preds_mean, preds_max, preds_var, preds_min], axis=1
+    )  # , preds_median, preds_skew, preds_kurt, preds_iqr], axis=1)
     return features_agg
 
 
@@ -148,3 +154,55 @@ class SoilDataset(Dataset):
         shuffled_gt = shuffled_gt.view(num_images, self.gt_dim, height, width)
 
         return shuffled_images, shuffled_gt
+
+
+class ImgGtDataset(Dataset):
+    def __init__(self, directory: str, ids: np.ndarray, std, max_val, gt: pd.DataFrame, gt_div: np.ndarray, size: int):
+        super().__init__()
+        self.gt = gt
+        self.ids = ids
+        self.gt_div = gt_div
+        self.size = size
+        self.max_val = max_val
+        self.bias = self.load_bias(MEAN_PATH)
+        self.images = self.load_images(directory)
+        self.transform = transforms.Compose([transforms.Normalize(0, std)])
+        self.gt_dim = len(gt_div)
+        self.gt_values = self._prepare_gt_values()
+
+    def __len__(self) -> int:
+        return len(self.images)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+        image = self.transform(self.images[index])
+        return image, self.gt_values[index]
+
+    def _prepare_gt_values(self) -> torch.Tensor:
+        num_images = len(self.images)
+        gt_values = torch.zeros((num_images, self.gt_dim, self.size, self.size), dtype=torch.float32)
+
+        for i in range(num_images):
+            soil = torch.from_numpy(self.gt.loc[i].values / self.gt_div).float()
+            gt_unsqueezed = soil.unsqueeze(1).unsqueeze(2)
+            gt_values[i] = gt_unsqueezed.repeat(1, self.size, self.size)
+
+        return gt_values
+
+    def load_bias(self, bias_path: str) -> np.ndarray:
+        with open(bias_path, "rb") as f:
+            bias = np.load(f)
+        return bias.reshape(bias.shape[0], 1, 1)
+
+    def load_images(self, directory: str) -> list[Tensor]:
+        filenames = list(Path(directory).rglob("*.npz"))
+        filenames = sorted(filenames, key=lambda i: int(i.name.split(".")[0]))
+        image_list = []
+        for filename in filenames:
+            if int(filename.stem) in self.ids:
+                with np.load(filename) as npz:
+                    arr = np.ma.MaskedArray(**npz)
+                    img = arr.data - self.bias
+                    img[arr.mask] = 0
+                    img[img > self.max_val] = self.max_val  # clip outliers to max_val
+                    image_list.append(torch.from_numpy(img).float())
+        return image_list
