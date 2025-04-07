@@ -4,7 +4,7 @@ from src.models.renderers.base_renderer import BaseRenderer
 
 
 class SplineRenderer(BaseRenderer):
-    def __init__(self, device: str, channels: int) -> None:
+    def __init__(self, device: str, channels: int, mod: str) -> None:
         super().__init__(device, channels)
 
     def __call__(self, batch: Tensor) -> Tensor:

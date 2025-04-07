@@ -6,19 +6,20 @@ from src.models.renderers.base_renderer import BaseRenderer
 
 
 class BetaRenderer(BaseRenderer):
-    def __init__(self, device: str, channels: int) -> None:
+    def __init__(self, device: str, channels: int, mod: str) -> None:
         super().__init__(device, channels)
 
     def __call__(self, batch: Tensor) -> Tensor:
         batch_size, k, params, h, w = batch.shape
         self.bands = torch.arange(1, self.channels + 1).float().repeat(k, h, w, 1).to(self.device) / (self.channels + 1)
-        rendered = torch.zeros((batch_size, self.channels, h, w))
+        rendered_list = []
 
         for idx in range(batch_size):
             dists = self.generate_distribution(batch[idx, :, 0, ...], batch[idx, :, 1, ...])
             pixel_dist = torch.sum(dists, dim=0)
-            rendered[idx] = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 2, ...]
+            rendered_list.append(pixel_dist.permute(2, 0, 1) + batch[idx, 0, 2, ...])
 
+        rendered = torch.stack(rendered_list)
         return rendered.to(self.device)
 
     def generate_distribution(self, alpha: Tensor, beta: Tensor) -> Tensor:
