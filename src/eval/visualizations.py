@@ -95,7 +95,7 @@ def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int
     wandb.log({"partial_hats": fig})
 
 
-def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx, key: str = "partial_hats") -> None:
+def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx: int = 0, key: str = "partial_hats") -> None:
     fig = go.Figure()
     x = np.linspace(1, channels, num=channels)
     shift = pixel_hats[0][3].numpy()

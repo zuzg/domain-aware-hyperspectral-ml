@@ -127,9 +127,9 @@ class Evaluator:
     def dual_mode(self) -> None:
         for i in range(3):
             latent = generate_latent(self.cfg.batch_size, self.cfg.img_size, self.cfg.k, 5, "cuda")
-            plot_partial_hats_skew(latent[0, ..., 50, 50], self.cfg.mu_type, self.cfg.channels, "ph_dual_gt")
+            plot_partial_hats_skew(latent[0, ..., 50, 50].cpu().detach(), self.cfg.mu_type, self.cfg.channels, key="ph_dual_gt")
             generated_images = self.renderer(latent)  # 16 150 100 100
             reconstructed_latents = self.modeller(generated_images)  # 16 5 5 100 100
             plot_partial_hats_skew(
-                reconstructed_latents[0, ..., 50, 50], self.cfg.mu_type, self.cfg.channels, "ph_dual_pred"
+                reconstructed_latents[0, ..., 50, 50].cpu().detach(), self.cfg.mu_type, self.cfg.channels, key="ph_dual_pred"
             )
