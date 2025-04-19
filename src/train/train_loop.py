@@ -126,7 +126,6 @@ def validate_step(
 
 
 def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
-    """Train the model with given configurations."""
     criterion = nn.HuberLoss(reduction="sum")
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
@@ -135,6 +134,12 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
 
     if cfg.wandb:
         wandb.watch(model, criterion, log="all", log_freq=10, log_graph=True)
+
+    # Early stopping parameters
+    patience = 5
+    min_delta = 0.0
+    best_val_loss = float("inf")
+    patience_counter = 0
 
     for epoch in range(cfg.epochs):
         train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
@@ -150,4 +155,15 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
                 }
             )
         scheduler.step()
+
+        # Early stopping logic
+        if val_loss < best_val_loss - min_delta:
+            best_val_loss = val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f"Early stopping triggered at epoch {epoch + 1}")
+                break
+
     return model
