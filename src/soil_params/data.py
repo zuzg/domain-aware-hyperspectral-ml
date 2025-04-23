@@ -55,6 +55,7 @@ def prepare_datasets(
 ) -> np.ndarray:
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collate_fn_pad)
     features = []
+    img_means = []
     model.eval()
     for data in dataloader:
         mask = data[:, 0] == 0
@@ -65,16 +66,23 @@ def prepare_datasets(
             pred = model(data)
             pred = pred.cpu().detach().numpy()
             masked_pred = apply_non_baseline_mask(pred, mask, k, num_params, ae)
+        data = data.cpu().detach().numpy()
+        data[data == 0] = np.nan
+        img_means.append(np.nanmean(data, axis=(2, 3)))
         features.append(masked_pred)
 
     features = np.array(features)
+    img_means = np.array(img_means)
     # sort by mu
     sort_key = features[:, :, :, 0, :, :]
     sort_indices = np.argsort(sort_key, axis=2)
     sorted_features = np.take_along_axis(features, np.expand_dims(sort_indices, axis=3), axis=2)
+    print(len(img_means))
 
     f_dim = channels if baseline else k * num_params
-    return sorted_features.reshape(features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1])
+    return sorted_features.reshape(
+        features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1]
+    ), img_means.reshape(features.shape[0] * batch_size, img_means.shape[-1])
 
 
 def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
