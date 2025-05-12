@@ -2,13 +2,12 @@ import torch
 from torch import Tensor
 from torch.distributions import Normal
 
-from src.models.renderers.base_renderer import BaseRenderer
+from src.models.renderers.gaussian_renderer import GaussianRenderer
 
 
-class GaussianSkewRenderer(BaseRenderer):
+class GaussianSkewRenderer(GaussianRenderer):
     def __init__(self, device: str, channels: int, mu_type: str) -> None:
-        super().__init__(device, channels)
-        self.mu_type = mu_type
+        super().__init__(device, channels, mu_type)
 
     def __call__(self, batch: Tensor) -> Tensor:
         batch_size, k, params, h, w = batch.shape
@@ -32,11 +31,17 @@ class GaussianSkewRenderer(BaseRenderer):
     def generate_distribution(self, mu: Tensor, sigma: Tensor, scale: Tensor, skew: Tensor) -> Tensor:
         eps = 1e-4
         sigma = torch.add(sigma, eps)
-        mu_transformed = self.channels * mu.unsqueeze(-1)
+        if self.mu_type == "unconstrained":
+            mu_transformed = self.channels * mu.unsqueeze(-1)
+        elif self.mu_type == "fixed_reference":
+            mu_transformed = self.adjust_tensor_intervals(mu.unsqueeze(-1), self.channels)
+        elif self.mu_type == "equal_interval":
+            mu_transformed = self.fix_intervals(mu.unsqueeze(-1), self.channels).to(self.device)
+
         skew = self.channels * skew.unsqueeze(-1)
 
         # Generate standard normal CDF and PDF
-        normal_dist = Normal(mu_transformed, self.channels * sigma.unsqueeze(-1))
+        normal_dist = Normal(mu_transformed, self.channels * sigma.unsqueeze(-1))  # sigma constrained - *15
         pdf = torch.exp(normal_dist.log_prob(self.bands))
         cdf = normal_dist.cdf(skew * (self.bands - mu_transformed))
 

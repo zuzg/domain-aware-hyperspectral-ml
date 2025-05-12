@@ -118,12 +118,14 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
     """Train the model with given configurations."""
     criterion = nn.HuberLoss(reduction="sum")
     criterion_dual = nn.HuberLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     psnr = PeakSignalNoiseRatio().to(cfg.device)
     mae = MeanAbsoluteError().to(cfg.device)
 
-    alpha = 0.5
+    alpha = cfg.alpha
+    if alpha == -1:
+        alpha = 0.5
     if cfg.wandb:
         wandb.watch(model, criterion, log="all", log_freq=10, log_graph=True)
 
@@ -148,6 +150,7 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
                 }
             )
         scheduler.step()
-        if alpha < 1:
+        if cfg.alpha < 1 and cfg.alpha > 0:
             alpha += 0.03
+            cfg.alpha += 0.03
     return model

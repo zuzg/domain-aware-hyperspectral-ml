@@ -34,6 +34,8 @@ class ExperimentConfig:
     predictor_path: str
     submission_path: str
 
+    alpha: float = 1.0
+
 
 @dataclass
 class RendererConfig:

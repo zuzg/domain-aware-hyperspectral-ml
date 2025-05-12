@@ -1,5 +1,7 @@
 from torch import nn, Tensor
 
+from src.models.modeller import Modeller
+
 
 class Encoder(nn.Module):
     def __init__(self, channels: int, k: int, num_params: int):
@@ -28,14 +30,14 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, channels: int, k: int, num_params: int):
         super().__init__()
-        self.relu = nn.ReLU()
-        self.conv1 = nn.Conv2d(num_params * k, 32, kernel_size=1)
-        self.norm1 = nn.BatchNorm2d(32)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=1)
-        self.norm2 = nn.BatchNorm2d(64)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=1)
-        self.norm3 = nn.BatchNorm2d(64)
-        self.conv4 = nn.Conv2d(64, 128, kernel_size=1)
+        self.relu = nn.LeakyReLU()
+        self.conv1 = nn.Conv2d(num_params * k, num_params * k // 2, kernel_size=1)
+        self.norm1 = nn.BatchNorm2d(num_params * k // 2)
+        self.conv2 = nn.Conv2d(num_params * k // 2, num_params * k // 4, kernel_size=1)
+        self.norm2 = nn.BatchNorm2d(num_params * k // 4)
+        self.conv3 = nn.Conv2d(num_params * k // 4, num_params * k // 4, kernel_size=1)
+        self.norm3 = nn.BatchNorm2d(num_params * k // 4)
+        self.conv4 = nn.Conv2d(num_params * k // 4, 128, kernel_size=1)
         self.norm4 = nn.BatchNorm2d(128)
         self.conv5 = nn.Conv2d(128, channels, kernel_size=1)
         self.output_activation = nn.Tanh()
@@ -53,11 +55,13 @@ class Decoder(nn.Module):
 class Autoencoder(nn.Module):
     def __init__(self, channels: int, k: int, num_params: int):
         super().__init__()
+        self.k = k
         self.num_params = num_params
-        self.encoder = Encoder(channels, k, num_params)
+        self.encoder = Modeller(channels, k, num_params)
         self.decoder = Decoder(channels, k, num_params)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.encoder(x)
+        x = x.view(x.shape[0], self.k * self.num_params, x.shape[-2], x.shape[-1])
         x = self.decoder(x)
         return x
