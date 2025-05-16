@@ -59,9 +59,19 @@ class DualModeAutoencoder(nn.Module):
             latent = generate_latent(
                 self.batch_size, self.img_size, self.k, self.num_params, next(self.parameters()).device
             )
+            latent = self.sort_hats(latent)
             generated_images = self.renderer(latent)  # 16 150 100 100
             reconstructed_latents = self.modeller(generated_images)  # 16 5 5 100 100
+            reconstructed_latents = self.sort_hats(reconstructed_latents)
             return latent, reconstructed_latents  # Compare input latent vs. reconstructed latent
 
         else:
             raise ValueError("Mode must be 'classical' or 'inverse'")
+
+    @staticmethod
+    def sort_hats(tensor: Tensor) -> Tensor:
+        sort_key = tensor[:, :, 0, :, :]
+        sort_indices = torch.argsort(sort_key, dim=1)
+        sort_indices = sort_indices.unsqueeze(2).expand(-1, -1, 5, -1, -1)
+        sorted_tensor = torch.gather(tensor, dim=1, index=sort_indices)
+        return sorted_tensor
