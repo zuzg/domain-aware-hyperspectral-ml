@@ -3,7 +3,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from scipy.stats import kurtosis, skew
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -13,8 +12,8 @@ from src.models.modeller import Modeller
 
 
 def collate_fn_pad(batch):
-    max_h = 200  # max(img.shape[1] for img in batch)  # Find max height in batch
-    max_w = 200  # max(img.shape[2] for img in batch)  # Find max width in batch
+    max_h = 300
+    max_w = 300
 
     padded_batch = []
     for img in batch:
@@ -31,14 +30,11 @@ def apply_baseline_mask(data: np.ndarray, mask: np.ndarray, channels: int) -> np
 
 
 def apply_non_baseline_mask(pred: np.ndarray, mask: np.ndarray, k: int, num_params: int, ae: bool) -> np.ndarray:
-    if ae:
-        expanded_mask = np.expand_dims(mask, axis=1)
-        crop_mask = np.repeat(expanded_mask, repeats=k * num_params, axis=1)
-    else:
+    if not ae:
         shift = pred[:, 0, num_params - 2 : num_params - 1]
         pred[:, :, num_params - 2] = shift
-        expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
-        crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
+    expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
+    crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
     return np.where(crop_mask == 0, pred, 0)
 
 
@@ -53,7 +49,7 @@ def prepare_datasets(
     ae: bool = False,
     baseline: bool = False,
 ) -> np.ndarray:
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collate_fn_pad)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collate_fn_pad)
     features = []
     img_means = []
     model.eval()
@@ -66,23 +62,31 @@ def prepare_datasets(
             pred = model(data)
             pred = pred.cpu().detach().numpy()
             masked_pred = apply_non_baseline_mask(pred, mask, k, num_params, ae)
-        data = data.cpu().detach().numpy()
+            data = data.cpu().detach().numpy()
         data[data == 0] = np.nan
         img_means.append(np.nanmean(data, axis=(2, 3)))
         features.append(masked_pred)
 
     features = np.array(features)
     img_means = np.array(img_means)
-    # sort by mu
-    sort_key = features[:, :, :, 0, :, :]
-    sort_indices = np.argsort(sort_key, axis=2)
-    sorted_features = np.take_along_axis(features, np.expand_dims(sort_indices, axis=3), axis=2)
-    print(len(img_means))
+    if baseline:
+        sorted_features = features
+    else:
+        # sort by mu
+        sort_key = features[:, :, :, 0, :, :]
+        sort_indices = np.argsort(sort_key, axis=2)
+        sorted_features = np.take_along_axis(features, np.expand_dims(sort_indices, axis=3), axis=2)
 
     f_dim = channels if baseline else k * num_params
-    return sorted_features.reshape(
+    sorted_features = sorted_features.reshape(
         features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1]
-    ), img_means.reshape(features.shape[0] * batch_size, img_means.shape[-1])
+    )
+    # Indices of shift_* except shift_1 (index 3)
+    if not ae:
+        drop_indices = [i * num_params + 3 for i in range(1, k)]
+        # Remove those feature channels
+        sorted_features = np.delete(sorted_features, drop_indices, axis=1)
+    return sorted_features, img_means.reshape(features.shape[0] * batch_size, img_means.shape[-1])
 
 
 def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
@@ -93,21 +97,24 @@ def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
     return gt
 
 
-def aggregate_features(features: np.ndarray) -> np.ndarray:
+def aggregate_features(features: np.ndarray, extended: bool = True, remove_outliers: bool = False) -> np.ndarray:
     features[features == 0] = np.nan
+
+    if remove_outliers:
+        std = np.nanstd(features)
+        mean = np.nanmean(features)
+        features[features < mean - 3 * std] = np.nan
+        features[features > mean + 3 * std] = np.nan
+
     preds_mean = np.nanmean(features, axis=(2, 3))
+    if not extended:
+        return preds_mean
+
     preds_max = np.nanmax(features, axis=(2, 3))
     preds_var = np.nanvar(features, axis=(2, 3))
     preds_min = np.nanmin(features, axis=(2, 3))
-    # preds_median = np.nanmedian(features, axis=(2, 3))
-    # preds_skew = skew(features, axis=(2, 3), nan_policy="omit")
-    # preds_kurt = kurtosis(features, axis=(2, 3), nan_policy="omit")
-    # q75, q25 = np.nanpercentile(features, [75, 25], axis=(2, 3))
-    # preds_iqr = q75 - q25
 
-    features_agg = np.concatenate(
-        [preds_mean, preds_max, preds_var, preds_min], axis=1
-    )  # , preds_median, preds_skew, preds_kurt, preds_iqr], axis=1)
+    features_agg = np.concatenate([preds_mean, preds_max, preds_var, preds_min], axis=1)
     return features_agg
 
 

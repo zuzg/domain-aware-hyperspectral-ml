@@ -27,10 +27,10 @@ def predict_params(
     model_path: str,
     save_model: bool = False,
 ) -> np.ndarray:
-    tune_hp = True
+    tune_hp = False
     if tune_hp:
         search = HalvingRandomSearchCV(
-            model_config.model, model_config.hyperparameters, scoring="neg_mean_squared_error", refit=True, n_jobs=-1
+            model_config.model(), model_config.hyperparameters, scoring="neg_mean_squared_error", refit=True, n_jobs=-1
         )
         model = MultiOutputRegressor(search)
         model.fit(x_train, y_train)
@@ -43,8 +43,9 @@ def predict_params(
     else:
         model = MultiOutputRegressor(model_config.model(**model_config.default_params))
         model.fit(x_train, y_train)
-    # if save_model:
-
+    if save_model:
+        with open(model_path, "wb") as f:
+            pickle.dump(model, f)
     preds = model.predict(x_test)
     mse = mean_squared_error(y_test, preds, multioutput="raw_values")
     return mse
@@ -55,11 +56,12 @@ def predict_params_stratified(x: np.ndarray, y: np.ndarray, model_config: ModelC
     y_array = np.array(y)
     models = []
     mse_scores = []
+    mse_stds = []
 
     for target_idx in range(y_array.shape[1]):
         print(f"Training model for target {GT_NAMES[target_idx]}")
         y_binned = pd.qcut(y_array[:, target_idx], q=num_bins, labels=False, duplicates="drop")
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        skf = StratifiedKFold(n_splits=5, shuffle=True)
         target_mse = []
 
         for train_idx, test_idx in skf.split(x_array, y_binned):
@@ -77,8 +79,10 @@ def predict_params_stratified(x: np.ndarray, y: np.ndarray, model_config: ModelC
         print("Target MSE")
         print(target_mse)
         mse_scores.append(np.mean(target_mse))
+        mse_stds.append(np.std(target_mse))
     print("-" * 10)
     print(mse_scores)
+    print(mse_stds)
     mse_scores = np.array(mse_scores)
     return mse_scores
 
@@ -89,7 +93,7 @@ def samples_number_experiment(
     sample_nums: list[int],
     model_config: ModelConfig,
     model_path: str,
-    n_runs: int = 1,
+    n_runs: int = 5,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     mses_mean = []
     mses_std = []
@@ -128,6 +132,7 @@ def samples_number_experiment(
                 "soil/Mg": mses_sample_mean[2],
                 "soil/pH": mses_sample_mean[3],
                 "soil/score": 0.25 * np.sum(mses_sample_mean),
+                "soil/std": 0.25 * np.sum(mses_for_sample.std(axis=0)),
             }
         )
     return np.array(mses_mean), np.array(mses_std)
@@ -136,13 +141,23 @@ def samples_number_experiment(
 def predict_soil_parameters(
     dataset: Dataset, model: Modeller, num_params: int, cfg: ExperimentConfig, ae: bool, split: bool = False
 ) -> None:
-    preds, avg_refls = prepare_datasets(dataset, model, cfg.k, cfg.channels, num_params, cfg.batch_size, cfg.device, ae)
-    preds_agg = aggregate_features(preds)
-    features = np.concatenate([preds_agg, avg_refls], axis=1)
+    preds, avg_refls = prepare_datasets(
+        dataset, model, cfg.k, cfg.channels, num_params, cfg.batch_size, cfg.device, ae, baseline=False
+    )
+    preds_agg = aggregate_features(preds, extended=False)
+    features = preds_agg
+
     gt = prepare_gt(dataset.ids)
-    max_samples = 1728
+    max_samples = 1732
     gt = gt[:max_samples].values
-    samples = [max_samples]  # [500, 250, 200, 150, 100, 50, 25, 10]
+    samples = [
+        max_samples,
+        # int(max_samples * 0.5),
+        # int(max_samples * 0.25),
+        # int(max_samples * 0.1),
+        # int(max_samples * 0.05),
+        # int(max_samples * 0.01),
+    ]  # [500, 250, 200, 150, 100, 50, 25, 10]
 
     if split:
         sizes = dataset.size_list
@@ -154,7 +169,7 @@ def predict_soil_parameters(
         gt_large = [gt[i] for i in indices_large]
 
         mses_mean_pred, mses_std_pred = samples_number_experiment(
-            preds_small, gt_small, samples, MODELS_CONFIG["KNeighbors"], f"{cfg.predictor_path}_small"
+            preds_small, gt_small, samples, MODELS_CONFIG["RandomForest"], f"{cfg.predictor_path}_small"
         )
         mses_mean_pred, mses_std_pred = samples_number_experiment(
             preds_large, gt_large, samples, MODELS_CONFIG["RandomForest"], f"{cfg.predictor_path}_large"

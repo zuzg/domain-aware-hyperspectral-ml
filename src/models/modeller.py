@@ -15,7 +15,6 @@ def calculate_mu(mu_group: Tensor) -> Tensor:
 class Modeller(nn.Module):
     def __init__(
         self,
-        img_size: int,
         channels: int,
         k: int,
         num_params: int,
@@ -23,7 +22,6 @@ class Modeller(nn.Module):
     ):
         super().__init__()
         self.k = k
-        self.size = img_size
         self.num_params = num_params
         self.multi_mu = multi_mu
         if multi_mu:
@@ -45,6 +43,7 @@ class Modeller(nn.Module):
         # self.norm = nn.BatchNorm2d(self.num_params * self.k, momentum=0.1)
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
+        self.relu = nn.ReLU()
 
         nn.init.xavier_uniform_(self.conv1.weight, gain=nn.init.calculate_gain("leaky_relu"))
         nn.init.xavier_uniform_(self.conv2.weight, gain=nn.init.calculate_gain("leaky_relu"))
@@ -57,7 +56,6 @@ class Modeller(nn.Module):
         x = self.lrelu3(self.conv3(x))
         x = self.lrelu4(self.conv4(x))
         x = self.conv5(x)
-        # x = x.view(x.shape[0], self.k, self.num_params, self.size, self.size)
         _, _, h, w = x.shape
         x = x.view(x.shape[0], self.k, self.num_params, h, w)  # Use h, w dynamically
         if self.num_params > 3:

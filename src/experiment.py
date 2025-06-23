@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader, Dataset
 from torchinfo import summary
 
 import wandb
-from soil_params.end_to_end import predict_soil_parameters
 from src.config import ExperimentConfig
 from src.consts import (
     DATA_PATH,
@@ -24,6 +23,7 @@ from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
+from src.soil_params.pred_ml import predict_soil_parameters
 
 
 def collate_fn_pad(batch: Tensor):
@@ -48,7 +48,7 @@ class Experiment:
 
     def _set_experiment_name(self) -> str:
         if self.ae:
-            return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
+            return f"Autoencoder_latent={3*self.cfg.k:.0f}"
         if self.cfg.dual_mode:
             pre = "[DUAL]"
         else:
@@ -68,19 +68,21 @@ class Experiment:
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
             HyperviewDataset(
-                DATA_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
-                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
             HyperviewDataset(
-                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
+                TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
             ),
         )
 
     def prepare_dataloaders(self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
         return (
-            DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True),
+            DataLoader(
+                trainset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True
+            ),
             DataLoader(valset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True),
             DataLoader(testset, batch_size=self.cfg.batch_size, collate_fn=collate_fn_pad, drop_last=True),
         )
@@ -94,13 +96,13 @@ class Experiment:
     def _setup_autoencoder(self, div: np.ndarray) -> nn.Module:
         self.num_params = 3
         variance_model = Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
-        bias_model = self._prepare_bias_model(div)
-        return BiasVarianceModel(bias_model, variance_model)
+        # bias_model = self._prepare_bias_model(div)
+        return variance_model
 
     def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
-        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        modeller = Modeller(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
         renderer = variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type)
         # bias_model = self._prepare_bias_model(div)
         if self.cfg.dual_mode:
@@ -130,16 +132,17 @@ class Experiment:
         return bias_model
 
     def run(self) -> None:
-        torch.manual_seed(42)
         max_values = self._load_max_values()
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
-            modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
-            modeller.load_state_dict(
-                torch.load(self.cfg.modeller_path)
-            )
+            if self.ae:
+                self.num_params = 3
+            else:
+                self.num_params = 5
+            modeller = Modeller(self.cfg.channels, self.cfg.k, self.num_params)
+            modeller.load_state_dict(torch.load(self.cfg.modeller_path))
             modeller = modeller.to(self.cfg.device)
-            predict_soil_parameters(testset, modeller, 5, self.cfg, self.ae)
+            predict_soil_parameters(testset, modeller, self.num_params, self.cfg, self.ae)
 
         else:
             self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
@@ -163,9 +166,7 @@ class Experiment:
             model = train(model, self.trainloader, self.valloader, self.cfg)
 
             modeller = model.encoder if self.ae else model.modeller
-            torch.save(
-                modeller.state_dict(), self.cfg.modeller_path
-            )
+            torch.save(modeller.state_dict(), self.cfg.modeller_path)
 
             if self.cfg.wandb:
                 div = max_values.reshape(max_values.shape[0], 1, 1)

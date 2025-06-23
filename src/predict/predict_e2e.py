@@ -57,7 +57,7 @@ class Prediction:
         self.cfg = cfg
 
     def run(self) -> None:
-        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
+        modeller = Modeller(self.cfg.channels, self.cfg.k, 5)
         regressor = MultiRegressionCNN(25)
         model = EndToEndModel(modeller, regressor)
         model.load_state_dict(torch.load(self.cfg.predictor_path))
@@ -71,9 +71,21 @@ class Prediction:
         )
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-        preds = predict_params(model, dataloader, GT_MAX, self.cfg.device)
-        submission = pd.DataFrame(data=preds, columns=GT_NAMES)
-        submission.to_csv(self.cfg.submission_path, index_label="sample_index")
+        single_model = False
+        if single_model:
+            preds = predict_params(model, dataloader, GT_MAX, self.cfg.device)
+            submission = pd.DataFrame(data=preds, columns=GT_NAMES)
+            submission.to_csv(self.cfg.submission_path, index_label="sample_index")
+        else:
+            regressor = MultiRegressionCNN(25, output_channels=1)
+            model = EndToEndModel(modeller, regressor)
+            submission = pd.DataFrame(columns=GT_NAMES)
+            for gt_name, gt_max in zip(GT_NAMES, GT_MAX):
+                model.load_state_dict(torch.load(f"output/models/e2e_model_{gt_name}.pth"))
+                model.to(self.cfg.device)
+                preds = predict_params(model, dataloader, [gt_max], self.cfg.device)
+                submission[gt_name] = preds
+            submission.to_csv(self.cfg.submission_path, index_label="sample_index")
 
 
 def main() -> None:

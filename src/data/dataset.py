@@ -23,6 +23,7 @@ class HyperviewDataset(Dataset):
         self.ids = ids
         self.max_val = max_val
         self.mask = mask
+        self.size_list = []
         self.bias = self.load_bias(bias_path)
         self.images = self.load_images(directory)
         self.transform = transforms.Compose([transforms.Normalize(mean, std)])
@@ -53,6 +54,7 @@ class HyperviewDataset(Dataset):
                         img[arr.mask] = 0
                     img[img > self.max_val] = self.max_val  # clip outliers to max_val
                     image_list.append(torch.from_numpy(img).float())
+                    self.size_list.append(img.shape[1])
         return image_list
 
 

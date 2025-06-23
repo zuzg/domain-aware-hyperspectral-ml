@@ -29,26 +29,31 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, channels: int, k: int, num_params: int):
-        super().__init__()
-        self.relu = nn.LeakyReLU()
-        self.conv1 = nn.Conv2d(num_params * k, num_params * k // 2, kernel_size=1)
-        self.norm1 = nn.BatchNorm2d(num_params * k // 2)
-        self.conv2 = nn.Conv2d(num_params * k // 2, num_params * k // 4, kernel_size=1)
-        self.norm2 = nn.BatchNorm2d(num_params * k // 4)
-        self.conv3 = nn.Conv2d(num_params * k // 4, num_params * k // 4, kernel_size=1)
-        self.norm3 = nn.BatchNorm2d(num_params * k // 4)
-        self.conv4 = nn.Conv2d(num_params * k // 4, 128, kernel_size=1)
-        self.norm4 = nn.BatchNorm2d(128)
-        self.conv5 = nn.Conv2d(128, channels, kernel_size=1)
-        self.output_activation = nn.Tanh()
-        self.float()
+        super(Decoder, self).__init__()
+        self.in_channels = num_params * k  # Should match encoder output
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.norm1(self.relu(self.conv1(x)))
-        x = self.norm2(self.relu(self.conv2(x)))
-        x = self.norm3(self.relu(self.conv3(x)))
-        x = self.norm4(self.relu(self.conv4(x)))
-        x = self.output_activation(self.conv5(x))
+        self.deconv1 = nn.Conv2d(self.in_channels, 256, kernel_size=1)
+        self.lrelu1 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+
+        self.deconv2 = nn.Conv2d(256, 512, kernel_size=1)
+        self.lrelu2 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+
+        self.deconv3 = nn.Conv2d(512, 1024, kernel_size=1)
+        self.lrelu3 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+
+        self.deconv4 = nn.Conv2d(1024, 512, kernel_size=1)
+        self.lrelu4 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+
+        self.deconv5 = nn.Conv2d(512, channels, kernel_size=1)
+        self.output_activation = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.lrelu1(self.deconv1(x))
+        x = self.lrelu2(self.deconv2(x))
+        x = self.lrelu3(self.deconv3(x))
+        x = self.lrelu4(self.deconv4(x))
+        x = self.deconv5(x)
+        x = self.output_activation(x)
         return x
 
 
