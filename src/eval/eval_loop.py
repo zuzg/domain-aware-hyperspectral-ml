@@ -7,7 +7,7 @@ from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
 from src.config import ExperimentConfig
-from src.consts import MAX_PATH
+from src.consts import VIZ_PATH
 from src.eval.visualizations import (
     plot_average_reflectance,
     plot_bias,
@@ -104,7 +104,7 @@ class Evaluator:
             cbar.set_label("Mean Absolute Error", fontsize=16)
             cbar.ax.tick_params(labelsize=14)
             fig.tight_layout()
-            fig.savefig("image_viz.png")
+            fig.savefig(VIZ_PATH / "image_viz.png")
 
         return imgs, renders, raw_outputs, None
 

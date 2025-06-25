@@ -21,6 +21,7 @@ from src.consts import (
     SPLIT_RATIO,
     TRAIN_IDS,
     TRAIN_PATH,
+    VIZ_PATH,
 )
 from src.models.modeller import Modeller
 from src.models.soil_predictor import EndToEndModel, MultiRegressionCNN
@@ -143,7 +144,7 @@ def predict_params(
             total_loss += channel_loss
 
     fig.tight_layout()
-    fig.savefig("output/soil_param_heatmaps_rgb.png")
+    fig.savefig(VIZ_PATH / "soil_param_heatmaps_rgb.png")
 
     # === Train Evaluation ===
     total_loss_train = torch.zeros(len(gt_div), device=device)
