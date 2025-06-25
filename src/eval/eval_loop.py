@@ -1,9 +1,13 @@
+import cmcrameri.cm as cmc
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
 from src.config import ExperimentConfig
+from src.consts import MAX_PATH
 from src.eval.visualizations import (
     plot_average_reflectance,
     plot_bias,
@@ -19,10 +23,11 @@ from src.eval.visualizations import (
     plot_splines,
 )
 from src.models.dual import generate_latent
+from src.soil_params.visualizations import get_rgb
 
 
 class Evaluator:
-    def __init__(self, model: nn.Module, cfg: ExperimentConfig, ae: bool, bias: np.ndarray):
+    def __init__(self, model: nn.Module, cfg: ExperimentConfig, ae: bool, bias: np.ndarray | float):
         self.model = model
         self.cfg = cfg
         self.ae = ae
@@ -39,30 +44,68 @@ class Evaluator:
         self._plot_results(imgs, renders, raw_outputs)
         # plot_param_stats(params)
 
-    def _process_testloader(self, testloader: DataLoader) -> tuple[list[Tensor]]:
+    def _process_testloader(
+        self, testloader: DataLoader, visualize: bool = False
+    ) -> tuple[list[Tensor], list[Tensor], list[Tensor], None]:
         imgs, renders, raw_outputs = [], [], []
-        params = []
         self.modeller.eval()
+
+        if visualize:
+            fig, axes = plt.subplots(nrows=3, ncols=5, figsize=(4 * 4, 10))
+            cmap = matplotlib.colormaps.get_cmap(cmc.imola)
+            example_indices = [1, 15, 31, 40, 65]
+            j = 0
+
         with torch.no_grad():
-            for img in testloader:
+            for i, img in enumerate(testloader):
                 img = img.to(self.cfg.device)
                 out = self.modeller(img)
-                # flattened = out.permute(0, 1, 3, 4, 2).reshape(-1, 4).cpu().detach()
-
-                # Randomly sample 10,000 points along the third axis
-                # indices = torch.randint(0, flattened.size(0), (1000,))  # Generate random indices
-                # samples = flattened[indices]
-                # params.extend(samples)
-                # params.append(torch.mean(out, dim=(0, 1, 3, 4)).cpu())
-                # params.append(torch.amax(out, dim=(0, 1, 3, 4)).cpu())
-                # params.append(torch.amin(out, dim=(0, 1, 3, 4)).cpu())
                 render = self._apply_rendering(out)
+
                 imgs.append(img)
                 renders.append(render.cpu().detach())
                 raw_outputs.append(out.cpu().detach())
-        # params_stacked = torch.stack(params, dim=0) * torch.tensor(
-        #     [self.cfg.channels, self.cfg.channels, self.cfg.channels, 1]
-        # )
+
+                if visualize and i in example_indices:
+                    mask = img[:, 0] == 0
+                    expanded_mask = mask.unsqueeze(1).expand(-1, 150, -1, -1)
+                    render[expanded_mask] = 0
+
+                    gt_plot = img.cpu().numpy()[0]
+                    pred_plot = render.cpu().numpy()[0]
+
+                    rgb_gt = get_rgb(gt_plot)
+                    rgb_pred = get_rgb(pred_plot)
+                    error = np.mean(np.abs(gt_plot - pred_plot), axis=0)
+                    print(np.nanmax(error))
+
+                    axes[0, j].imshow(rgb_gt)
+                    axes[1, j].imshow(rgb_pred)
+                    im = axes[2, j].imshow(error, cmap=cmap, vmin=0, vmax=0.015)
+
+                    if i == example_indices[0]:
+                        axes[0, j].set_ylabel("Ground truth", fontsize=18, rotation=90)
+                        axes[1, j].set_ylabel("Reconstructed", fontsize=18, rotation=90)
+                        axes[2, j].set_ylabel("Error", fontsize=18, rotation=90)
+
+                    j += 1
+
+        if visualize:
+            for row in axes:
+                for ax in row:
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    for spine in ax.spines.values():
+                        spine.set_visible(False)
+
+            fig.tight_layout(rect=[0, 0.03, 1, 1])
+            cbar_ax = fig.add_axes([0.2, 0.02, 0.6, 0.01])  # [left, bottom, width, height]
+            cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal")
+            cbar.set_label("Mean Absolute Error", fontsize=16)
+            cbar.ax.tick_params(labelsize=14)
+            fig.tight_layout()
+            fig.savefig("image_viz.png")
+
         return imgs, renders, raw_outputs, None
 
     def _apply_rendering(self, out: Tensor) -> Tensor:
@@ -80,12 +123,12 @@ class Evaluator:
             ids = [0]
             mask_nan = False
         else:
-            ids = [1, 8, 10]
+            ids = [0, 1, 5]
             mask_nan = True
         for i in ids:
             self._plot_image_comparisons(imgs[i][i].cpu(), renders[i][i].cpu(), mask_nan, i)
             self._plot_variance_renderer(raw_outputs[i][i] if not self.ae else None, i)
-        self._plot_bias()
+        # self._plot_bias()
         if self.cfg.dual_mode:
             self.dual_mode()
 

@@ -1,10 +1,11 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 import wandb
 from sklearn.model_selection import StratifiedKFold
-from torch import nn
-from torch.utils.data import DataLoader, Dataset, random_split, Subset
+from torch import nn, Tensor
+from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from tqdm import tqdm
 
 from src.config import ExperimentConfig
@@ -17,14 +18,15 @@ from src.consts import (
     MSE_BASE_P,
     MSE_BASE_PH,
     OUTPUT_PATH,
+    SPLIT_RATIO,
     TRAIN_IDS,
     TRAIN_PATH,
-    SPLIT_RATIO,
 )
 from src.models.modeller import Modeller
 from src.models.soil_predictor import EndToEndModel, MultiRegressionCNN
 from src.soil_params.data import ImgGtDataset, prepare_gt
 from src.soil_params.utils import collate_fn_pad_full, compute_masks
+from src.soil_params.visualizations import plot_hyperview_score, plot_param_heatmap, plot_rgb_image
 
 
 def train_end_to_end(
@@ -67,6 +69,18 @@ def train_end_to_end(
     return model
 
 
+def compute_scores(
+    masked_gt: Tensor,
+    masked_pred: Tensor,
+    base_values: Tensor,
+    criterion: nn.Module,
+) -> Tensor:
+    mse = criterion(masked_gt, masked_pred)
+    base_values_expanded = base_values.expand_as(masked_pred)
+    score = mse / base_values_expanded
+    return score.mean(dim=1)
+
+
 def predict_params(
     trainloader: DataLoader,
     testloader: DataLoader,
@@ -76,22 +90,29 @@ def predict_params(
     device: str = "cuda",
     model_name: str = "",
     save_model: bool = False,
-):
+) -> tuple[np.ndarray, np.ndarray]:
     log = not save_model
     out_dim = 1
 
-    model = train_end_to_end(trainloader, modeller, f_dim, out_dim=out_dim, log=log)
+    model: nn.Module = train_end_to_end(trainloader, modeller, f_dim, out_dim=out_dim, log=log)
+
     if save_model:
         torch.save(model.state_dict(), OUTPUT_PATH / "models" / f"e2e_model_{model_name}.pth")
+
     model.to(device)
     model.eval()
 
     criterion = nn.MSELoss(reduction="none")
-    total_loss = torch.zeros(out_dim, device=device)
     gt_div_tensor = torch.tensor(gt_div, device=device).reshape(1, out_dim, 1, 1)
+    base_values = torch.tensor(
+        [MSE_BASE_K, MSE_BASE_MG, MSE_BASE_P, MSE_BASE_PH], dtype=torch.float32, device=device
+    ).view(1, -1, 1, 1)
+
+    total_loss = torch.zeros(out_dim, device=device)
+    fig, axes = plt.subplots(nrows=5, ncols=6, figsize=(20, 16))
 
     with torch.no_grad():
-        for img, gt in testloader:
+        for i, (img, gt) in enumerate(testloader):
             img, gt = img.to(device), gt.to(device)
             mask = img[:, 0] == 0
             div = (img[:, 0] != 0).sum().item()
@@ -99,11 +120,50 @@ def predict_params(
             pred = model(img)
             masked_gt, masked_pred = compute_masks(pred, gt, mask, gt_div_tensor)
 
+            if 5 <= i < 10:
+                vis_idx = i - 5
+                plot_rgb_image(axes[vis_idx, 0], img.cpu().numpy()[0], vis_idx)
+                score_mean = compute_scores(masked_gt, masked_pred, base_values, criterion)
+                plot_hyperview_score(axes[vis_idx, 1], score_mean.cpu().numpy()[0], vis_idx, fig)
+
+                for p_idx in range(4):
+                    gt_np = masked_gt.cpu().numpy()[0][p_idx]
+                    pred_np = masked_pred.cpu().numpy()[0][p_idx]
+                    plot_param_heatmap(
+                        axes[vis_idx, p_idx + 2],
+                        pred_np,
+                        gt_np.max(),
+                        GT_NAMES[p_idx],
+                        is_header=(vis_idx == 0),
+                        fig=fig,
+                    )
+
             loss = criterion(masked_pred, masked_gt)
             channel_loss = loss.sum(dim=(0, 2, 3)) / div
             total_loss += channel_loss
 
-    return (total_loss / len(testloader)).cpu().detach().numpy()
+    fig.tight_layout()
+    fig.savefig("output/soil_param_heatmaps_rgb.png")
+
+    # === Train Evaluation ===
+    total_loss_train = torch.zeros(len(gt_div), device=device)
+    with torch.no_grad():
+        for img, gt in trainloader:
+            img, gt = img.to(device), gt.to(device)
+            mask = img[:, 0] == 0
+            div = (img[:, 0] != 0).sum().item()
+
+            pred = model(img)
+            masked_gt, masked_pred = compute_masks(pred, gt, mask, gt_div_tensor)
+
+            loss_t = criterion(masked_pred, masked_gt)
+            channel_loss_t = loss_t.sum(dim=(0, 2, 3)) / div
+            total_loss_train += channel_loss_t
+
+    avg_test_loss = (total_loss / len(testloader)).cpu().numpy()
+    avg_train_loss = (total_loss_train / len(trainloader)).cpu().numpy()
+
+    return avg_test_loss, avg_train_loss
 
 
 def predict_params_stratified(
@@ -169,7 +229,7 @@ def samples_number_experiment(
             )
             testloader = DataLoader(
                 testset,
-                batch_size=8,
+                batch_size=1,
                 shuffle=False,
                 collate_fn=collate_fn_pad_full,
             )
@@ -177,6 +237,7 @@ def samples_number_experiment(
             # mse = predict_params(trainloader, testloader, modeller, f_dim, gt_div, "cuda")
             mse = predict_params_stratified(dataset, modeller, f_dim, gt_div)
             print(mse)
+            print(0.25 * np.sum(mse / mse_base))
             mses_for_sample.append(mse / mse_base)
 
         mses_for_sample = np.array(mses_for_sample)

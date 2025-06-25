@@ -1,18 +1,36 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
-import wandb
+import scienceplots
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from plotly.subplots import make_subplots
 from torch.utils.data import Dataset
 
-from src.consts import GT_NAMES
+import wandb
+from src.consts import GT_NAMES, MAX_PATH
+
+
+plt.style.use(["science", "no-latex"])
 
 
 def gt_to_lists(dataset: Dataset) -> tuple[list]:
-    ps, ks, mgs, phs, = [], [], [], []
-    for (img, gt) in dataset:
+    (
+        ps,
+        ks,
+        mgs,
+        phs,
+    ) = (
+        [],
+        [],
+        [],
+        [],
+    )
+    for img, gt in dataset:
         pixel = gt[:, 0, 0]
         p, k, mg, ph = pixel[0], pixel[1], pixel[2], pixel[3]
         ps.append(p)
@@ -103,3 +121,76 @@ def plot_soil_params(
         title_text="MLP: mean and std of MSE for each predicted soil parameter", showlegend=True, hovermode="x"
     )
     wandb.log({"soil_params": fig})
+
+
+def normalize_band(band: np.ndarray) -> np.ndarray:
+    band_min, band_max = np.nanmin(band), np.nanmax(band)
+    return (band - band_min) / (band_max - band_min + 1e-8)
+
+
+# Load and cap max values
+with open(MAX_PATH, "rb") as f:
+    max_values = np.load(f)
+max_values[max_values > 6000] = 6000
+MAX_VAL = max_values
+
+
+def get_rgb(img: np.ndarray) -> np.ndarray:
+    img[img == 0] = np.nan
+    channels = [2, 28, 59]
+    rgb = np.stack([normalize_band(img[c] * MAX_VAL[c]) for c in channels], axis=-1)
+    return np.nan_to_num(rgb, nan=1.0)
+
+
+def plot_rgb_image(ax: Axes, img: np.ndarray, instance_idx: int) -> None:
+    rgb = get_rgb(img)
+    im = ax.imshow(rgb)
+    ax.set_title("false-color" if instance_idx == 0 else "")
+    ax.set_ylabel(f"Instance {instance_idx + 1}", fontsize=20, weight="bold")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("left", size="5%", pad=0.05)
+    cax.set_visible(False)
+
+
+def plot_hyperview_score(ax: Axes, score_mean: np.ndarray, instance_idx: int, fig: Figure) -> None:
+    score_mean[score_mean == 0] = np.nan
+    im = ax.imshow(score_mean, cmap="coolwarm", vmin=0.0, vmax=2.0)
+    ax.set_title("Hyperview Score" if instance_idx == 0 else "")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.ax.tick_params(labelsize=15)
+
+
+def plot_param_heatmap(
+    ax: Axes,
+    pred_plot: np.ndarray,
+    gt_max: float,
+    param_name: str,
+    is_header: bool,
+    fig: Figure,
+) -> None:
+    cmap = matplotlib.colormaps.get_cmap("Blues")
+    cmap.set_bad("white")
+    pred_plot[pred_plot == 0] = np.nan
+    pred_plot[pred_plot < 0] = 0
+    im = ax.imshow(pred_plot, cmap=cmap)
+    if is_header:
+        ax.set_title(param_name, fontsize=20, weight="bold")
+    ax.set_xlabel(f"GT = {gt_max:.1f}", fontsize=16)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.ax.tick_params(labelsize=15)
