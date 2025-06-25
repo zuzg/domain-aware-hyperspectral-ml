@@ -1,0 +1,32 @@
+# data
+img_size: 0
+channels: 200 #204 #103
+max_val: 6000
+
+# model
+dual_mode: false
+bias_renderer: "Mean"
+variance_renderer: "GaussianSkewRenderer"
+mu_type: "unconstrained"
+k: 5
+
+# training
+batch_size: 8
+epochs: 50
+lr: 0.0001
+device: "cuda"
+
+# wandb
+wandb: true
+tags:
+  - "indiana"
+
+# misc
+save_model: true
+predict_soil: true
+fold_dir: "data/benchmark/Indian Pines"
+
+# paths
+modeller_path: "output/models/modeller_benchmark.pth"
+predictor_path: "output/models/predictor_benchmark.pth"
+submission_path: "output/submissions/sub_benchmark.csv"
