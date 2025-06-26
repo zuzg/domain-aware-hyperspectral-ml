@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import numpy as np
+
 from src.config import RendererConfig
 from src.models.autoencoder import Autoencoder
 from src.models.renderers.beta_renderer import BetaRenderer
@@ -9,22 +11,6 @@ from src.models.renderers.gaussian_skew_renderer import GaussianSkewRenderer
 from src.models.renderers.polynomial_degree_renderer import PolynomialDegreeRenderer
 from src.models.renderers.polynomial_renderer import PolynomialRenderer
 from src.models.renderers.spline_renderer import SplineRenderer
-
-# paths
-DATA_PATH: Path = Path("data/hyperview")
-OUTPUT_PATH: Path = Path("output")
-TRAIN_PATH: Path = DATA_PATH / "train_data/train_data"
-TEST_PATH: Path = DATA_PATH / "test_data"
-GT_PATH: Path = DATA_PATH / "train_data/train_gt.csv"
-STATS_PATH: Path = DATA_PATH / "stats"
-MAX_PATH: Path = STATS_PATH / "max_c_masked.npy"
-MEAN_PATH: Path = STATS_PATH / "mean_c_masked.npy"
-STD_PATH: Path = STATS_PATH / "std_c.npy"
-
-# data
-TRAIN_IDS: list[int] = list(range(1732))
-TEST_IDS: list[int] = list(range(1154))
-SPLIT_RATIO: list[int] = [1000, 124, 608]
 
 # models
 RENDERERS_DICT: dict[str, RendererConfig] = {
@@ -39,13 +25,38 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
     "None": RendererConfig(None, 0),
 }
 
+
+# ------------HYPERVIEW 2--------------
 # soil
-GT_DIM: int = 4
-GT_NAMES: list[str] = ["P", "K", "Mg", "pH"]
-GT_MAX: list[float] = [325.0, 625.0, 400.0, 7.8]
-GT_MEAN: list[float] = [70.30265589, 227.98851039, 159.28123557, 6.7827194]
-GT_STD: list[float] = [29.50478432, 61.89198947, 39.87182917, 0.26029811]
-MSE_BASE_P: int = 1100
-MSE_BASE_K: int = 2500
-MSE_BASE_MG: int = 2000
-MSE_BASE_PH: int = 3
+GT_DIM: int = 6
+GT_NAMES: list[str] = ["B", "Cu", "Zn", "Fe", "S", "Mn"]
+GT_MAX: list[float] = [1.9, 4.3, 14.4, 481.7, 96.8092647002, 167.6]
+MSE_BASE_B: int = 2500
+MSE_BASE_CU: int = 1100
+MSE_BASE_ZN: int = 2000
+MSE_BASE_FE: int = 1000
+MSE_BASE_S: int = 500
+MSE_BASE_MN: int = 300
+
+# paths
+DATA_PATH: Path = Path("data/HYPERVIEW2")
+OUTPUT_PATH: Path = Path("output")
+TRAIN_PATH: Path = DATA_PATH / "train/hsi_satellite"
+TEST_PATH: Path = DATA_PATH / "test/hsi_satellite"
+GT_PATH: Path = DATA_PATH / "train_gt.csv"
+STATS_PATH: Path = DATA_PATH / "stats"
+MAX_PATH: Path = STATS_PATH / "max_c.npy"
+MEAN_PATH: Path = STATS_PATH / "mean_c.npy"
+STD_PATH: Path = STATS_PATH / "std_c.npy"
+
+MSI_TRAIN_PATH: Path = DATA_PATH / "train/msi_satellite"
+MSI_TEST_PATH: Path = DATA_PATH / "test/msi_satellite"
+AIRBORNE_TRAIN_PATH: Path = DATA_PATH / "train/hsi_airborne"
+
+# data
+TRAIN_IDS: list[int] = list(range(1876))
+TEST_IDS: list[int] = list(range(1888))
+SPLIT_RATIO: list[int] = [1000, 124, 752]
+
+# PRISMA
+water_bands: np.ndarray = np.array([[97, 108], [141, 160], [224, 229]])  # open intervals

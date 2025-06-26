@@ -1,0 +1,32 @@
+# data
+img_size: 3
+channels: 230
+max_val: 1000  # to be ignored
+
+# model
+dual_mode: false
+bias_renderer: "Mean"
+variance_renderer: "GaussianSkewRenderer"
+mu_type: "unconstrained"
+k: 5
+alpha: 1
+
+# training
+batch_size: 16
+epochs: 20
+lr: 0.001
+device: "cpu"
+
+# wandb
+wandb: true
+tags:
+  - "HYPERVIEW2"
+
+# misc
+save_model: false
+predict_soil: true
+
+# paths
+modeller_path: "output/models/h2_modeller_k=5_latest.pth"
+predictor_path: "output/models/rf_baseline.pickle"
+submission_path: "output/submissions/baseline_k=5_sw_aug.csv"
