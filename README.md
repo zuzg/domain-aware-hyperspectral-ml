@@ -15,14 +15,19 @@ The project aims to design and evaluate machine learning models that incorporate
 ## 📁 Repository Structure
 ```bash
 ├── configs/ # Experiment and benchmark configuration files
-├── notebooks/ # Jupyter notebooks for EDA and modeling
+├── notebooks/ # Jupyter notebooks for EDA and XAI
 ├── src/ # Core source code for training, evaluation, prediction
+│ ├── benchmark/ # Code for benchmarking on hyperspectral scenes
 │ ├── data/ # Data loading and preprocessing
-│ ├── models/ # Model architectures
 │ ├── eval/ # Evaluation scripts
+│ ├── models/ # Model architectures
 │ ├── predict/ # Prediction pipeline
+│ ├── soil_params/ # Downstream task
 │ ├── train/ # Training logic
-│ └── soil_params/ # Domain-specific soil parameter estimation
+│ ├── config.py
+│ ├── consts.py
+│ ├── entrypoint.py
+│ └──experiment.py # Full experiment logic
 ├── env.yml # Conda environment dependencies
 ├── .gitignore
 └── README.md
