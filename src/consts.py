@@ -13,6 +13,8 @@ from src.models.renderers.spline_renderer import SplineRenderer
 # paths
 DATA_PATH: Path = Path("data/hyperview")
 OUTPUT_PATH: Path = Path("output")
+ARCHITECTURES_PATH: Path = OUTPUT_PATH / "architectures"
+SUBMISSION_PATH: Path = OUTPUT_PATH / "submissions"
 VIZ_PATH: Path = OUTPUT_PATH / "viz"
 TRAIN_PATH: Path = DATA_PATH / "train_data/train_data"
 TEST_PATH: Path = DATA_PATH / "test_data"

@@ -7,14 +7,16 @@ from torchinfo import summary
 import wandb
 from src.config import ExperimentConfig
 from src.consts import (
-    DATA_PATH,
+    ARCHITECTURES_PATH,
     MAX_PATH,
     MEAN_PATH,
     OUTPUT_PATH,
     RENDERERS_DICT,
     SPLIT_RATIO,
+    SUBMISSION_PATH,
     TRAIN_IDS,
     TRAIN_PATH,
+    VIZ_PATH,
 )
 from src.data.dataset import HyperviewDataset
 from src.data.preprocessing import mean_path_to_bias
@@ -131,7 +133,14 @@ class Experiment:
                 param.requires_grad = False
         return bias_model
 
+    def _init_dirs() -> None:
+        OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+        ARCHITECTURES_PATH.mkdir(parents=True, exist_ok=True)
+        SUBMISSION_PATH.mkdir(parents=True, exist_ok=True)
+        VIZ_PATH.mkdir(parents=True, exist_ok=True)
+
     def run(self) -> None:
+        self._init_dirs()
         max_values = self._load_max_values()
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
@@ -152,10 +161,10 @@ class Experiment:
                     model,
                     input_size=(self.cfg.batch_size, self.cfg.channels, self.cfg.img_size, self.cfg.img_size),
                 )
-                with open(f"{OUTPUT_PATH}/architectures/{self.name}.txt", "w") as f:
+                with open(ARCHITECTURES_PATH / f"{self.name}.txt", "w") as f:
                     f.write(str(modeller_summary))
                 artifact = wandb.Artifact(name="Model", type="architecture")
-                artifact.add_file(local_path=f"{OUTPUT_PATH}/architectures/{self.name}.txt")
+                artifact.add_file(local_path=ARCHITECTURES_PATH / f"{self.name}.txt")
                 wandb.log_artifact(artifact)
 
             if self.cfg.dual_mode:
