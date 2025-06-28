@@ -219,7 +219,6 @@ def center_crop(img: np.ndarray, size: tuple[int, int]) -> np.ndarray:
 def random_crop(img: np.ndarray, size: tuple[int, int], max_attempts: int = 10) -> np.ndarray:
     c, h, w = img.shape
     ch, cw = size
-
     if ch > h or cw > w:
         raise ValueError("Crop size must be less than or equal to image size.")
 
@@ -228,7 +227,6 @@ def random_crop(img: np.ndarray, size: tuple[int, int], max_attempts: int = 10) 
         startw = np.random.randint(0, w - cw + 1)
         crop = img[:, starth:starth + ch, startw:startw + cw]
 
-        # Check if the crop is not entirely NaNs
         if not np.isnan(crop).all():
             return crop
 
@@ -261,6 +259,7 @@ def load_msi_images(directory: Path, aug: bool = False) -> np.ndarray:
             image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices], axis=0)) # variance?
 
             if aug and size > 9:
+                # for j in range(2): # two augs per large image
                 new_size = np.random.choice([4, 6, 7, 9])
                 new_img = random_crop(img, DIMS[new_size])
                 if new_size == 7:

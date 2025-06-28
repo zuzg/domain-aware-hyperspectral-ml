@@ -2,7 +2,10 @@ import pickle
 
 import numpy as np
 import pandas as pd
+
+# import sklearn
 from sklearn.experimental import enable_halving_search_cv  # noqa
+from sklearn.feature_selection import RFECV
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import (
     HalvingRandomSearchCV,
@@ -11,7 +14,8 @@ from sklearn.model_selection import (
 )
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
-from sklearn.utils import compute_sample_weight
+
+# from sklearn.utils import compute_sample_weight
 from torch.utils.data import Dataset
 
 import wandb
@@ -34,6 +38,8 @@ from src.soil_params.data import (
     prepare_gt,
 )
 from src.soil_params.utils import MODELS_CONFIG, ModelConfig
+
+# sklearn.set_config(enable_metadata_routing=True)
 
 
 def get_weights(target: np.ndarray, q: float) -> np.ndarray:
@@ -86,27 +92,36 @@ def predict_params(
             pickle.dump(model, f)
 
     preds = model.predict(x_test)
-
-    # ch = [1.3, 3.1, 8.0, 275.0]
-    qs = [3., 3., 3., 3.]
+    # preds = np.zeros_like(y_test)
 
     for i in range(4):  # B, CU, ZN, FE
-        model = model_config.model(**model_config.default_params)
+        print(f"param {i}")
+        rf = model_config.model(**model_config.default_params)
+        # model = rf
+        # model = TransformedTargetRegressor(rf, func=np.log1p, inverse_func=np.expm1)
+        model = RFECV(rf, n_jobs=-1, min_features_to_select=60, cv=2)
+
         gt = y_train[:, i]
 
-        # if i < 2:
-        weights = compute_sample_weight("balanced", gt)
-        # else:
-        #     weights = compute_sample_weights(gt)
+        # df = pd.DataFrame(x_train)
+        # df["y"] = gt
 
-        # y_log = np.log1p(gt)
+        # meth = "balance"# if i == 3 else "balanced"
+        # oversampled = iblr.ro(data=df, y="y", samp_method=meth)
+
+        # x_sampled = oversampled.iloc[:,:-1]
+        # y_sampled = oversampled["y"]
   
-        model.fit(x_train, gt, sample_weight=weights)
+        # weights = compute_sample_weight("balanced", gt)
+        model.fit(x_train, gt)#, sample_weight=weights)
+
+        print("cv results")
+        print(model.cv_results_)
+
         with open(f"{model_path}_soil_{i}", "wb") as f:
             pickle.dump(model, f)
-        y_pred_log = model.predict(x_test)
-        # preds[:, i] = np.expm1(y_pred_log)
-        preds[:, i] = y_pred_log
+        y_pred = model.predict(x_test)
+        preds[:, i] = y_pred
     
     
     # rounded_preds = preds.copy()
