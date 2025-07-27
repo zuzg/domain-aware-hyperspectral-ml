@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import optuna
 import pandas as pd
+import wandb
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import (
@@ -17,7 +18,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.utils import compute_sample_weight
 from torch.utils.data import Dataset
 
-import wandb
 from src.config import ExperimentConfig
 from src.consts import (
     GT_NAMES,
@@ -42,14 +42,23 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
-def objective(trial: optuna.trial.Trial, x_train: np.ndarray, y_train: np.ndarray, x_val: np.ndarray, y_val: np.ndarray, target_index: int):
+def objective(
+    trial: optuna.trial.Trial,
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_val: np.ndarray,
+    y_val: np.ndarray,
+    target_index: int,
+):
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 50, 300),
         "max_depth": trial.suggest_int("max_depth", 5, 30),
         "min_samples_split": trial.suggest_int("min_samples_split", 2, 10),
         "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
         "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
-        "criterion": trial.suggest_categorical("criterion", ["squared_error", "absolute_error", "poisson"]),
+        "criterion": trial.suggest_categorical(
+            "criterion", ["squared_error", "absolute_error", "poisson"]
+        ),
         "bootstrap": trial.suggest_categorical("bootstrap", [True, False]),
         "n_jobs": -1,
     }
@@ -59,20 +68,24 @@ def objective(trial: optuna.trial.Trial, x_train: np.ndarray, y_train: np.ndarra
     weights = compute_sample_weight("balanced", gt)
 
     scores = cross_val_score(
-        model, x_train, gt,
+        model,
+        x_train,
+        gt,
         scoring="neg_mean_squared_error",
         cv=5,
-        params={"sample_weight": weights}
+        params={"sample_weight": weights},
     )
     return -np.mean(scores)
 
 
-def train_models_with_optuna(x_train: np.ndarray,
+def train_models_with_optuna(
+    x_train: np.ndarray,
     x_test: np.ndarray,
     y_train: np.ndarray,
     y_test: np.ndarray,
     model_config: ModelConfig,
-    model_path: str):
+    model_path: str,
+):
     preds = np.zeros_like(y_test)
 
     for i in range(6):
@@ -113,7 +126,11 @@ def predict_params(
     tune_hp = False
     if tune_hp:
         search = RandomizedSearchCV(
-            model_config.model(), model_config.hyperparameters, scoring="neg_mean_squared_error", refit=True, n_jobs=-1
+            model_config.model(),
+            model_config.hyperparameters,
+            scoring="neg_mean_squared_error",
+            refit=True,
+            n_jobs=-1,
         )
         model = MultiOutputRegressor(search)
         model.fit(x_train, y_train)
@@ -125,7 +142,7 @@ def predict_params(
     else:
         model = MultiOutputRegressor(model_config.model(**model_config.default_params))
         model.fit(x_train, y_train)
-    
+
     if save_model:
         with open(model_path, "wb") as f:
             pickle.dump(model, f)
@@ -150,7 +167,9 @@ def predict_params(
     return mse
 
 
-def predict_params_stratified(x: np.ndarray, y: np.ndarray, model_config: ModelConfig, num_bins: int = 5) -> np.ndarray:
+def predict_params_stratified(
+    x: np.ndarray, y: np.ndarray, model_config: ModelConfig, num_bins: int = 5
+) -> np.ndarray:
     x_array = np.array(x)
     y_array = np.array(y)
     models = []
@@ -158,13 +177,18 @@ def predict_params_stratified(x: np.ndarray, y: np.ndarray, model_config: ModelC
 
     for target_idx in range(y_array.shape[1]):
         log.info(f"Training model for target {GT_NAMES[target_idx]}")
-        y_binned = pd.qcut(y_array[:, target_idx], q=num_bins, labels=False, duplicates="drop")
+        y_binned = pd.qcut(
+            y_array[:, target_idx], q=num_bins, labels=False, duplicates="drop"
+        )
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         target_mse = []
 
         for train_idx, test_idx in skf.split(x_array, y_binned):
             x_train, x_test = x_array[train_idx], x_array[test_idx]
-            y_train, y_test = y_array[train_idx, target_idx], y_array[test_idx, target_idx]
+            y_train, y_test = (
+                y_array[train_idx, target_idx],
+                y_array[test_idx, target_idx],
+            )
 
             model = model_config.model(**model_config.default_params)
             model.fit(x_train, y_train)
@@ -190,11 +214,13 @@ def samples_number_experiment(
     model_config: ModelConfig,
     model_path: str,
     n_runs: int = 1,
+    wdb: bool = False,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     mses_mean = []
     mses_std = []
-    wandb.define_metric("soil/step")
-    wandb.define_metric("soil/*", step_metric="soil/step")
+    if wdb:
+        wandb.define_metric("soil/step")
+        wandb.define_metric("soil/*", step_metric="soil/step")
     save_model = True
 
     if model_config.name not in ["RandomForest", "XGB", "LGBM"]:
@@ -207,11 +233,25 @@ def samples_number_experiment(
         mses_for_sample = []
 
         for run in range(n_runs):
-            x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
+            x_train_base, x_test, y_train_base, y_test = train_test_split(
+                x, y, test_size=0.2, random_state=run
+            )
             x_train, y_train = x, y  # x_train_base, y_train_base
-            mse = predict_params(x_train, x_test, y_train, y_test, model_config, model_path, save_model)
+            mse = predict_params(
+                x_train, x_test, y_train, y_test, model_config, model_path, save_model
+            )
             save_model = False
-            mses_for_sample.append(mse / [MSE_BASE_B, MSE_BASE_CU, MSE_BASE_ZN, MSE_BASE_FE, MSE_BASE_S, MSE_BASE_MN])
+            mses_for_sample.append(
+                mse
+                / [
+                    MSE_BASE_B,
+                    MSE_BASE_CU,
+                    MSE_BASE_ZN,
+                    MSE_BASE_FE,
+                    MSE_BASE_S,
+                    MSE_BASE_MN,
+                ]
+            )
 
         mses_for_sample = np.array(mses_for_sample)
         mses_sample_mean = mses_for_sample.mean(axis=0)
@@ -219,19 +259,19 @@ def samples_number_experiment(
         mses_std.append(mses_for_sample.std(axis=0))
 
         log.info(f"score = {1 / len(GT_NAMES) * np.sum(mses_sample_mean)}")
-
-        wandb.log(
-            {
-                # "soil/step": -sn,
-                f"soil/{GT_NAMES[0]}": mses_sample_mean[0],
-                f"soil/{GT_NAMES[1]}": mses_sample_mean[1],
-                f"soil/{GT_NAMES[2]}": mses_sample_mean[2],
-                f"soil/{GT_NAMES[3]}": mses_sample_mean[3],
-                f"soil/{GT_NAMES[4]}": mses_sample_mean[4],
-                f"soil/{GT_NAMES[5]}": mses_sample_mean[5],
-                "soil/score": 1 / len(GT_NAMES) * np.sum(mses_sample_mean),
-            }
-        )
+        if wdb:
+            wandb.log(
+                {
+                    # "soil/step": -sn,
+                    f"soil/{GT_NAMES[0]}": mses_sample_mean[0],
+                    f"soil/{GT_NAMES[1]}": mses_sample_mean[1],
+                    f"soil/{GT_NAMES[2]}": mses_sample_mean[2],
+                    f"soil/{GT_NAMES[3]}": mses_sample_mean[3],
+                    f"soil/{GT_NAMES[4]}": mses_sample_mean[4],
+                    f"soil/{GT_NAMES[5]}": mses_sample_mean[5],
+                    "soil/score": 1 / len(GT_NAMES) * np.sum(mses_sample_mean),
+                }
+            )
     return np.array(mses_mean), np.array(mses_std)
 
 
@@ -243,9 +283,16 @@ def airborne_feature(x: np.ndarray, y: np.ndarray):
 
 
 def predict_soil_parameters(
-    dataset: Dataset, model: Modeller, num_params: int, cfg: ExperimentConfig, ae: bool, aug: bool = True
+    dataset: Dataset,
+    model: Modeller,
+    num_params: int,
+    cfg: ExperimentConfig,
+    ae: bool,
+    aug: bool = True,
 ) -> None:
-    preds, avg_refls = prepare_datasets(dataset, model, cfg.k, cfg.channels, num_params, 4, cfg.device, ae)
+    preds, avg_refls = prepare_datasets(
+        dataset, model, cfg.k, cfg.channels, num_params, 4, cfg.device, ae
+    )
     log.info("Dataset for regressors prepped")
     preds_agg = aggregate_features(preds)
     log.info(preds.shape)

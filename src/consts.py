@@ -42,6 +42,7 @@ MSE_BASE_MN: int = 300
 DATA_PATH: Path = Path("data/HYPERVIEW2")
 OUTPUT_PATH: Path = Path("output")
 ARCHITECTURES_PATH: Path = OUTPUT_PATH / "architectures"
+MODELS_PATH: Path = OUTPUT_PATH / "models"
 SUBMISSION_PATH: Path = OUTPUT_PATH / "submissions"
 TRAIN_PATH: Path = DATA_PATH / "train/hsi_satellite"
 TEST_PATH: Path = DATA_PATH / "test/hsi_satellite"
@@ -61,4 +62,6 @@ TEST_IDS: list[int] = list(range(1888))
 SPLIT_RATIO: list[int] = [1000, 124, 752]
 
 # PRISMA
-water_bands: np.ndarray = np.array([[97, 108], [141, 160], [224, 229]])  # open intervals
+water_bands: np.ndarray = np.array(
+    [[97, 108], [141, 160], [224, 229]]
+)  # open intervals

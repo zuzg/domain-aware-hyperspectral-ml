@@ -18,7 +18,7 @@ lr: 0.001
 device: "cpu"
 
 # wandb
-wandb: true
+wandb: false
 tags:
   - "HYPERVIEW2"
 
@@ -27,7 +27,6 @@ save_model: true
 predict_soil: true
 
 # paths
-# modeller_path: "output/models/h2_modeller_k=5_latest_retrain_water.pth"
-modeller_path: "output/models/final_test.pth"
-predictor_path: "output/models/testsss.pickle"
-submission_path: "output/submissions/test_test.csv"
+modeller_path: "output/models/features_putential.pth"
+predictor_path: "output/models/predictor_putential.pickle"
+submission_path: "output/submissions/PUTential.csv"
