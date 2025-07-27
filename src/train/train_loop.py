@@ -1,12 +1,12 @@
 import numpy as np
 import torch
-import wandb
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.utils.data import DataLoader
 from torchmetrics import MeanAbsoluteError
 from torchmetrics.image import PeakSignalNoiseRatio
 from tqdm import tqdm
 
+import wandb
 from src.config import ExperimentConfig
 from src.train.metrics import calculate_sam
 
@@ -157,13 +157,13 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
         scheduler.step()
 
         # Early stopping logic
-        if val_loss < best_val_loss - min_delta:
-            best_val_loss = val_loss
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                print(f"Early stopping triggered at epoch {epoch + 1}")
-                break
+        # if val_loss < best_val_loss - min_delta:
+        #     best_val_loss = val_loss
+        #     patience_counter = 0
+        # else:
+        #     patience_counter += 1
+        #     if patience_counter >= patience:
+        #         print(f"Early stopping triggered at epoch {epoch + 1}")
+        #         break
 
     return model

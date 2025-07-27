@@ -8,7 +8,7 @@ def main() -> None:
     experiment = Experiment(cfg=cfg)
     experiment.run()
     pred = Prediction(cfg=cfg)
-    # pred.run()
+    pred.run()
 
 
 if __name__ == "__main__":

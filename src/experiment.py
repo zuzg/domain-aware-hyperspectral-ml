@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 from torch import Tensor, nn
@@ -7,12 +9,14 @@ from torchinfo import summary
 import wandb
 from src.config import ExperimentConfig
 from src.consts import (
+    ARCHITECTURES_PATH,
     DATA_PATH,
     MAX_PATH,
     MEAN_PATH,
     OUTPUT_PATH,
     RENDERERS_DICT,
     SPLIT_RATIO,
+    SUBMISSION_PATH,
     TEST_IDS,
     TRAIN_IDS,
     TRAIN_PATH,
@@ -25,6 +29,9 @@ from src.models.bias_variance_model import BiasModel, VarianceModel
 from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
 from src.soil_params.pred_ml import predict_soil_parameters
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 def collate_fn_pad(batch: Tensor):
@@ -127,10 +134,17 @@ class Experiment:
             for param in bias_model.parameters():
                 param.requires_grad = False
         return bias_model
+    
+    def _init_dirs(self) -> None:
+        OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+        ARCHITECTURES_PATH.mkdir(parents=True, exist_ok=True)
+        SUBMISSION_PATH.mkdir(parents=True, exist_ok=True)
 
     def run(self) -> None:
         torch.manual_seed(42)
+        self._init_dirs()
         max_values = self._load_max_values()
+        log.info("Preparing dataset for autoencoder")
         trainset, valset, testset = self.prepare_datasets(max_values)
         self.cfg.channels = trainset.channels
         if not self.cfg.save_model:
@@ -149,10 +163,10 @@ class Experiment:
                     model,
                     input_size=(self.cfg.batch_size, self.cfg.channels, self.cfg.img_size, self.cfg.img_size),
                 )
-                with open(f"{OUTPUT_PATH}/architectures/{self.name}.txt", "w") as f:
+                with open(ARCHITECTURES_PATH / f"{self.name}.txt", "w") as f:
                     f.write(str(modeller_summary))
                 artifact = wandb.Artifact(name="Model", type="architecture")
-                artifact.add_file(local_path=f"{OUTPUT_PATH}/architectures/{self.name}.txt")
+                artifact.add_file(local_path=ARCHITECTURES_PATH / f"{self.name}.txt")
                 wandb.log_artifact(artifact)
 
             if self.cfg.dual_mode:
@@ -169,10 +183,10 @@ class Experiment:
 
             if self.cfg.wandb:
                 div = max_values.reshape(max_values.shape[0], 1, 1)
-                # div = div[trainset.water_mask]
-                print("Evaluating")
+                div = div[trainset.water_mask]
+                log.info("Evaluating")
                 Evaluator(model, self.cfg, self.ae, testset.bias / div).evaluate(self.testloader)
             if self.cfg.predict_soil:
-                print("Predicting soil")
+                log.info("Predicting soil parameters")
                 predict_soil_parameters(testset, modeller, self.num_params, self.cfg, self.ae)
         wandb.finish()

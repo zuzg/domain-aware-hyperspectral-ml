@@ -41,6 +41,8 @@ MSE_BASE_MN: int = 300
 # paths
 DATA_PATH: Path = Path("data/HYPERVIEW2")
 OUTPUT_PATH: Path = Path("output")
+ARCHITECTURES_PATH: Path = OUTPUT_PATH / "architectures"
+SUBMISSION_PATH: Path = OUTPUT_PATH / "submissions"
 TRAIN_PATH: Path = DATA_PATH / "train/hsi_satellite"
 TEST_PATH: Path = DATA_PATH / "test/hsi_satellite"
 GT_PATH: Path = DATA_PATH / "train_gt.csv"

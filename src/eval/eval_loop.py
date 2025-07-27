@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.utils.data import DataLoader
 
 from src.config import ExperimentConfig
@@ -8,7 +8,6 @@ from src.eval.visualizations import (
     plot_average_reflectance,
     plot_bias,
     plot_images,
-    plot_param_stats,
     plot_partial_betas,
     plot_partial_hats,
     plot_partial_hats_asymmetric,
@@ -37,42 +36,25 @@ class Evaluator:
     def evaluate(self, testloader: DataLoader) -> None:
         imgs, renders, raw_outputs, params = self._process_testloader(testloader)
         self._plot_results(imgs, renders, raw_outputs)
-        plot_param_stats(params)
+        # plot_param_stats(params)
 
     def _process_testloader(self, testloader: DataLoader) -> tuple[list[Tensor]]:
         imgs, renders, raw_outputs = [], [], []
-        params = []
         self.modeller.eval()
         with torch.no_grad():
             for img in testloader:
                 img = img.to(self.cfg.device)
                 out = self.modeller(img)
-                flattened = out.permute(0, 1, 3, 4, 2).reshape(-1, 4).cpu().detach()
-
-                # Randomly sample 10,000 points along the third axis
-                indices = torch.randint(0, flattened.size(0), (1000,))  # Generate random indices
-                samples = flattened[indices]
-                params.extend(samples)
-                # params.append(torch.mean(out, dim=(0, 1, 3, 4)).cpu())
-                # params.append(torch.amax(out, dim=(0, 1, 3, 4)).cpu())
-                # params.append(torch.amin(out, dim=(0, 1, 3, 4)).cpu())
                 render = self._apply_rendering(out)
                 imgs.append(img)
                 renders.append(render.cpu().detach())
                 raw_outputs.append(out.cpu().detach())
-        params_stacked = torch.stack(params, dim=0) * torch.tensor(
-            [self.cfg.channels, self.cfg.channels, self.cfg.channels, 1]
-        )
-        return imgs, renders, raw_outputs, params_stacked
+        return imgs, renders, raw_outputs, None
 
     def _apply_rendering(self, out: Tensor) -> Tensor:
         if self.ae:
             return out
         rendered = self.renderer(out)
-        # if self.cfg.bias_renderer == "Mean" or self.cfg.bias_renderer == "None":
-        #     rendered += self.bias_model
-        # elif self.bias_model is not None:
-        #     rendered += self.bias_model(0)
         return rendered
 
     def _plot_results(self, imgs: list[Tensor], renders: list[Tensor], raw_outputs: list[Tensor]) -> None:

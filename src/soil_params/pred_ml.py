@@ -1,21 +1,20 @@
+import logging
 import pickle
 
 import numpy as np
+import optuna
 import pandas as pd
-
-# import sklearn
-from sklearn.experimental import enable_halving_search_cv  # noqa
-from sklearn.feature_selection import RFECV
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import (
-    HalvingRandomSearchCV,
+    RandomizedSearchCV,
     StratifiedKFold,
+    cross_val_score,
     train_test_split,
 )
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
-
-# from sklearn.utils import compute_sample_weight
+from sklearn.utils import compute_sample_weight
 from torch.utils.data import Dataset
 
 import wandb
@@ -39,25 +38,67 @@ from src.soil_params.data import (
 )
 from src.soil_params.utils import MODELS_CONFIG, ModelConfig
 
-# sklearn.set_config(enable_metadata_routing=True)
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
-def get_weights(target: np.ndarray, q: float) -> np.ndarray:
-    vals, counts = np.unique(target, return_counts=True)
-    val_to_weight = dict(zip(vals, q / counts))
-    sample_weight = np.vectorize(val_to_weight.get)(target)
-    return sample_weight
+def objective(trial: optuna.trial.Trial, x_train: np.ndarray, y_train: np.ndarray, x_val: np.ndarray, y_val: np.ndarray, target_index: int):
+    params = {
+        "n_estimators": trial.suggest_int("n_estimators", 50, 300),
+        "max_depth": trial.suggest_int("max_depth", 5, 30),
+        "min_samples_split": trial.suggest_int("min_samples_split", 2, 10),
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
+        "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
+        "criterion": trial.suggest_categorical("criterion", ["squared_error", "absolute_error", "poisson"]),
+        "bootstrap": trial.suggest_categorical("bootstrap", [True, False]),
+        "n_jobs": -1,
+    }
+
+    model = RandomForestRegressor(**params)
+    gt = y_train[:, target_index]
+    weights = compute_sample_weight("balanced", gt)
+
+    scores = cross_val_score(
+        model, x_train, gt,
+        scoring="neg_mean_squared_error",
+        cv=5,
+        params={"sample_weight": weights}
+    )
+    return -np.mean(scores)
 
 
-def compute_sample_weights(y: np.ndarray, n_bins: int = 20) -> np.ndarray:
-    # Compute quantile-based bins (ensures ~equal-sized bins)
-    bins = np.quantile(y, np.linspace(0, 1, n_bins + 1))
-    bins[0] -= 1e-6  # ensure lowest value is included
-    y_binned = np.digitize(y, bins[1:], right=True)
-    bin_counts = np.bincount(y_binned, minlength=n_bins)
-    weights = 1. / (bin_counts[y_binned] + 1e-6)
-    weights *= len(weights) / np.sum(weights)
-    return weights
+def train_models_with_optuna(x_train: np.ndarray,
+    x_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    model_config: ModelConfig,
+    model_path: str):
+    preds = np.zeros_like(y_test)
+
+    for i in range(6):
+        log.info(f"Tuning model for param {i}")
+
+        def optuna_objective(trial):
+            return objective(trial, x_train, y_train, x_test, y_test, i)
+
+        study = optuna.create_study(direction="minimize")
+        study.optimize(optuna_objective, n_trials=100, show_progress_bar=True)
+
+        log.info(f"Best params for target {i}: {study.best_params}")
+
+        best_model = model_config.model(**study.best_params)
+        gt = y_train[:, i]
+        weights = compute_sample_weight("balanced", gt)
+
+        best_model.fit(x_train, gt, sample_weight=weights)
+
+        with open(f"{model_path}_soil_{i}", "wb") as f:
+            pickle.dump(best_model, f)
+
+        preds[:, i] = best_model.predict(x_test)
+
+    mse = mean_squared_error(y_test, preds, multioutput="raw_values")
+    return mse
 
 
 def predict_params(
@@ -71,20 +112,18 @@ def predict_params(
 ) -> np.ndarray:
     tune_hp = False
     if tune_hp:
-        search = HalvingRandomSearchCV(
+        search = RandomizedSearchCV(
             model_config.model(), model_config.hyperparameters, scoring="neg_mean_squared_error", refit=True, n_jobs=-1
         )
         model = MultiOutputRegressor(search)
         model.fit(x_train, y_train)
 
-        print(f"Best params for {model_path}")
+        log.info(f"Best params for {model_path}")
         for i, gt_name in enumerate(GT_NAMES):
-            print(gt_name)
-            print(model.estimators_[i].best_params_)
+            log.info(gt_name)
+            log.info(model.estimators_[i].best_params_)
     else:
-        # model = RegressorChain(model_config.model(**model_config.default_params), order=[5, 4, 3, 0, 1, 2])
         model = MultiOutputRegressor(model_config.model(**model_config.default_params))
-        # model = model_config.model(**model_config.default_params)
         model.fit(x_train, y_train)
     
     if save_model:
@@ -92,67 +131,21 @@ def predict_params(
             pickle.dump(model, f)
 
     preds = model.predict(x_test)
-    # preds = np.zeros_like(y_test)
 
     for i in range(4):  # B, CU, ZN, FE
-        print(f"param {i}")
-        rf = model_config.model(**model_config.default_params)
-        # model = rf
-        # model = TransformedTargetRegressor(rf, func=np.log1p, inverse_func=np.expm1)
-        model = RFECV(rf, n_jobs=-1, min_features_to_select=60, cv=2)
-
+        log.info(f"param {i}")
+        model = model_config.model(**model_config.default_params)
         gt = y_train[:, i]
 
-        # df = pd.DataFrame(x_train)
-        # df["y"] = gt
+        weights = compute_sample_weight("balanced", gt)
 
-        # meth = "balance"# if i == 3 else "balanced"
-        # oversampled = iblr.ro(data=df, y="y", samp_method=meth)
-
-        # x_sampled = oversampled.iloc[:,:-1]
-        # y_sampled = oversampled["y"]
-  
-        # weights = compute_sample_weight("balanced", gt)
-        model.fit(x_train, gt)#, sample_weight=weights)
-
-        print("cv results")
-        print(model.cv_results_)
-
+        model.fit(x_train, gt, sample_weight=weights)
         with open(f"{model_path}_soil_{i}", "wb") as f:
             pickle.dump(model, f)
+
         y_pred = model.predict(x_test)
         preds[:, i] = y_pred
-    
-    
-    # rounded_preds = preds.copy()
 
-    # for col in range(rounded_preds.shape[1]):
-    #     if col != 4:
-    #         rounded_preds[:, col] = np.round(rounded_preds[:, col], 1)
-
-    # y_train_cu = y_train[:, 1].astype(str)
-    # model_cu = RandomForestClassifier(class_weight="balanced")
-    # model_cu.fit(x_train, y_train_cu)
-
-    # if save_model:
-    #     with open(f"{model_path}_cu", "wb") as f:
-    #         pickle.dump(model_cu, f)
-    
-    # preds_cu = model_cu.predict(x_test)
-    # preds[:, 1] = preds_cu.astype(float)
-
-    # last_col = x_test[:, -1]
-    # unique_vals = np.unique(last_col)
-    # grouped_mse = {}
-
-    # for val in unique_vals:
-    #     indices = np.where(last_col == val)[0]
-    #     mse_group = mean_squared_error(y_test[indices], preds[indices], multioutput='raw_values')
-    #     grouped_mse[val] = mse_group
-
-    # for val, mse in grouped_mse.items():
-    #     print(f"Size: {val:.0f} -> MSE: {np.mean(mse / [MSE_BASE_B, MSE_BASE_CU, MSE_BASE_ZN, MSE_BASE_FE, MSE_BASE_S, MSE_BASE_MN])}")
-    
     mse = mean_squared_error(y_test, preds, multioutput="raw_values")
     return mse
 
@@ -164,7 +157,7 @@ def predict_params_stratified(x: np.ndarray, y: np.ndarray, model_config: ModelC
     mse_scores = []
 
     for target_idx in range(y_array.shape[1]):
-        print(f"Training model for target {GT_NAMES[target_idx]}")
+        log.info(f"Training model for target {GT_NAMES[target_idx]}")
         y_binned = pd.qcut(y_array[:, target_idx], q=num_bins, labels=False, duplicates="drop")
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         target_mse = []
@@ -181,11 +174,11 @@ def predict_params_stratified(x: np.ndarray, y: np.ndarray, model_config: ModelC
             target_mse.append(mse)
 
         models.append(model)
-        print("Target MSE")
-        print(target_mse)
+        log.info("Target MSE")
+        log.info(target_mse)
         mse_scores.append(np.mean(target_mse))
-    print("-" * 10)
-    print(mse_scores)
+    log.info("-" * 10)
+    log.info(mse_scores)
     mse_scores = np.array(mse_scores)
     return mse_scores
 
@@ -205,10 +198,9 @@ def samples_number_experiment(
     save_model = True
 
     if model_config.name not in ["RandomForest", "XGB", "LGBM"]:
-        print("Scaling")
+        log.info("Scaling")
         scaler = StandardScaler().fit(x)
-        # with open("output/models/scaler.pickel", "wb") as f:
-        #     pickle.dump(scaler, f)
+
         x = scaler.transform(x)
 
     for sn in sample_nums:
@@ -216,29 +208,8 @@ def samples_number_experiment(
 
         for run in range(n_runs):
             x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
-            x_train, y_train = x_train_base, y_train_base
-
-            # for i in range(6):
-            #     print(GT_NAMES[i])
-            #     y_gt = y[:, i]
-            #     estimator = model_config.model(**model_config.default_params)
-            #     selector = RFE(estimator, n_features_to_select=15, step=1)
-            #     selector = selector.fit(x, y_gt)
-            #     print(selector.support_)
-            #     print(selector.ranking_)
-
-            # x_aug, y_aug = mix_batch(x_train, y_train, num_samples=1000)
-            # x_train = np.concatenate([x_train, x_aug], axis=0)
-            # y_train = np.concatenate([y_train, y_aug], axis=0)
-
+            x_train, y_train = x, y  # x_train_base, y_train_base
             mse = predict_params(x_train, x_test, y_train, y_test, model_config, model_path, save_model)
-            # mse = predict_params_stratified(x, y, model_config)
-            # print(mse)
-            # model = MultiOutputRegressor(RandomForestRegressor(n_estimators=200))
-            # model.fit(x, y)
-            # if save_model:
-            #     with open(model_path, "wb") as f:
-            #         pickle.dump(model, f)
             save_model = False
             mses_for_sample.append(mse / [MSE_BASE_B, MSE_BASE_CU, MSE_BASE_ZN, MSE_BASE_FE, MSE_BASE_S, MSE_BASE_MN])
 
@@ -247,7 +218,7 @@ def samples_number_experiment(
         mses_mean.append(mses_sample_mean)
         mses_std.append(mses_for_sample.std(axis=0))
 
-        print(f"score = {1 / len(GT_NAMES) * np.sum(mses_sample_mean)}")
+        log.info(f"score = {1 / len(GT_NAMES) * np.sum(mses_sample_mean)}")
 
         wandb.log(
             {
@@ -272,36 +243,23 @@ def airborne_feature(x: np.ndarray, y: np.ndarray):
 
 
 def predict_soil_parameters(
-    dataset: Dataset, model: Modeller, num_params: int, cfg: ExperimentConfig, ae: bool, split: bool = False
+    dataset: Dataset, model: Modeller, num_params: int, cfg: ExperimentConfig, ae: bool, aug: bool = True
 ) -> None:
     preds, avg_refls = prepare_datasets(dataset, model, cfg.k, cfg.channels, num_params, 4, cfg.device, ae)
-    # TODO augment 2x2 from 3x3 and 3x2 before aggs
-    print("Dataset prepped")
+    log.info("Dataset for regressors prepped")
     preds_agg = aggregate_features(preds)
-    # features = preds_agg
-    print(preds.shape)
-    # preds_flat = preds.reshape(preds.shape[0], -1)
-    # features = preds_flat
-
-    aug = False
+    log.info(preds.shape)
 
     msi_means, msi_means_aug, msi_ids = load_msi_images(MSI_TRAIN_PATH, aug=aug)
-    mask_info = np.array(dataset.is_fully_masked)
-    mask_info = np.expand_dims(mask_info, axis=1)
-    # features = np.concatenate([preds_flat, msi_means], axis=1)
 
     # minerals = load_minerals(TRAIN_PATH)
-    
-    # sizes = np.array(dataset.size_list)
-    # sizes = np.expand_dims(sizes, axis=1)
+    # derivatives = load_derivatives(TRAIN_PATH)
     # hsi = load_hsi_airborne_images(AIRBORNE_TRAIN_PATH)
+    # airborne_feature(msi_means, hsi)
+
     features = np.concatenate([preds_agg, msi_means], axis=1)
     gt = prepare_gt(dataset.ids)
-    max_samples = 1876
-    gt = gt[:max_samples].values
-    samples = [max_samples]
-
-    # airborne_feature(msi_means, hsi)
+    gt = gt.values
 
     if aug:
         preds_agg_aug = preds_agg[msi_ids]
@@ -311,49 +269,7 @@ def predict_soil_parameters(
         features = np.concatenate([features, features_aug], axis=0)
         gt = np.concatenate([gt, gt_aug], axis=0)
 
-
-    if split:
-        sizes = dataset.size_list
-        possible_sizes = [1, 2, 4, 6, 9]
-
-        for s in possible_sizes:
-            # TODO train on all and check per size?
-            # train on and bigger
-            # if s == 4 or s == 6:
-            #     ids = [i for i, size in enumerate(sizes) if size >= s]
-            #     # features_size = np.array([features[i][features[i] != 0][:s*17] for i in ids])
-            #     features_size = np.array([
-            #         features[i][features[i] != 0][
-            #             max(0, (len(features[i][features[i] != 0]) - s*17) // 2) :
-            #             max(0, (len(features[i][features[i] != 0]) - s*17) // 2) + s*17
-            #         ]
-            #         for i in ids
-            #     ])
-            #     print(features_size.shape)
-            # else:
-            #     ids = [i for i, size in enumerate(sizes) if size == s]
-            #     features_size = np.array([features[i][features[i] != 0] for i in ids])
-            
-            ids = [i for i, size in enumerate(sizes) if size == s]
-            features_size = np.array([features[i][features[i] != 0] for i in ids])
-            gt_size = [gt[i] for i in ids]
-
-            print(f"size: {s}, number of samples: {features_size.shape[0]}")
-            mses_mean_pred, mses_std_pred = samples_number_experiment(
-            features_size, gt_size, samples, MODELS_CONFIG["RandomForest"], f"{cfg.predictor_path}"
-        )
-
-
-
-    # mask = np.array(dataset.fully_masked_ids)
-    # features = features[~mask]
-    # gt = gt[~mask]
-
-    # features_permuted = permute_spatial_pixels(preds).reshape(preds.shape[0], -1)
-    # features = np.concatenate([preds_flat, features_permuted], axis=0)
-    # gt = np.concatenate([gt, gt], axis=0)
-    else:
-        print("Training")
-        mses_mean_pred, mses_std_pred = samples_number_experiment(
-            features, gt, samples, MODELS_CONFIG["RandomForest"], f"{cfg.predictor_path}"
-        )
+    log.info("Training regressors")
+    mses_mean_pred, mses_std_pred = samples_number_experiment(
+        features, gt, [len(gt)], MODELS_CONFIG["RandomForest"], f"{cfg.predictor_path}"
+    )

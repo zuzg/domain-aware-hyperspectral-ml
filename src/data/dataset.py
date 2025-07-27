@@ -35,8 +35,8 @@ class HyperviewDataset(Dataset):
         self.is_fully_masked = []
         self.bias = self.load_bias(bias_path)
         self.images = self.load_images(directory)
-        # self.bias = self.bias[self.water_mask]
-        self.transform = transforms.Compose([transforms.Normalize(mean, std)])#[self.water_mask]
+        self.bias = self.bias[self.water_mask]
+        self.transform = transforms.Compose([transforms.Normalize(mean, std[self.water_mask])])#[self.water_mask]
 
     def __len__(self) -> int:
         return len(self.images)
@@ -78,7 +78,7 @@ class HyperviewDataset(Dataset):
                         self.is_fully_masked.append(1)
                     else:
                         self.is_fully_masked.append(0)
-                    # img = self.delete_water_bands(img)
+                    img = self.delete_water_bands(img)
                     # padded_flat_mask = pad_to_length(arr.mask[0].flatten().astype(int))
                     # self.flat_masks.append(padded_flat_mask)
 

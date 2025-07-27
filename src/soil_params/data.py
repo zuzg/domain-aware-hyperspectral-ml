@@ -16,15 +16,15 @@ from src.models.modeller import Modeller
 
 
 def collate_fn_pad(batch):
-    max_h = 3# max(img.shape[1] for img in batch)  # Find max height in batch
-    max_w = 3#max(img.shape[2] for img in batch)  # Find max width in batch
+    max_h = 3
+    max_w = 3
 
     padded_batch = []
     for img in batch:
-        padded_img = nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))  # Pad to max size
+        padded_img = nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))
         padded_batch.append(padded_img)
 
-    return torch.stack(padded_batch)  # Stack into a single tensor
+    return torch.stack(padded_batch)
 
 
 def apply_baseline_mask(data: np.ndarray, mask: np.ndarray, channels: int) -> np.ndarray:
@@ -80,7 +80,6 @@ def prepare_datasets(
     sort_key = features[:, :, :, 0, :, :]
     sort_indices = np.argsort(sort_key, axis=2)
     sorted_features = np.take_along_axis(features, np.expand_dims(sort_indices, axis=3), axis=2)
-    print(len(img_means))
 
     f_dim = channels if baseline else k * num_params
     sorted_features = sorted_features.reshape(
@@ -153,45 +152,6 @@ def compute_indices(img: np.ndarray) -> np.ndarray:
     return vals
 
 
-def compute_indices_extended(img: np.ndarray) -> np.ndarray:
-    # Sentinel-2 bands
-    blue = img[1]
-    green = img[2]
-    red = img[3]
-    red_edge1 = img[4]  # 705 nm
-    red_edge2 = img[5]  # 740 nm
-    red_edge3 = img[6]  # 783 nm
-    nir = img[7]        # 842 nm
-    swir1 = img[10]     # 1610 nm
-    swir2 = img[11]     # 2190 nm
-
-    indices = {
-        # Vegetation health
-        'NDVI': np.nanmean((nir - red) / (nir + red + 1e-6)), # TF
-        'EVI': np.nanmean(2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1)), # FF
-        'SAVI': np.nanmean((1.5 * (nir - red)) / (nir + red + 0.5 + 1e-6)), # FF
-        'NDRE': np.nanmean((nir - red_edge2) / (nir + red_edge2 + 1e-6)), # FT
-        'RECI': np.nanmean((nir / red_edge1) - 1),  # Red-edge chlorophyll index # FT
-
-        # Soil/Water indicators
-        'NDWI': np.nanmean((nir - swir1) / (nir + swir1 + 1e-6)), # TT
-        'BSI': np.nanmean(((swir1 + red) - (nir + blue)) / ((swir1 + red) + (nir + blue) + 1e-6)),  # Bare soil index # FT
-        'SI': np.nanmean((swir1 - nir) / (swir1 + nir + 1e-6)),  # Simple soil index # TF
-
-        # Chemical/mineral indicators
-        'ClayIndex': np.nanmean(swir1 / (swir2 + 1e-6)), # TT
-        'NDSI': np.nanmean((swir1 - green) / (swir1 + green + 1e-6)),  # iron oxide proxy# TT
-        'FeIndex': np.nanmean(red / (blue + 1e-6)),  # Iron oxide index # TT
-        'OMI': np.nanmean((red + green) / (nir + 1e-6)),  # Organic matter index (simplified) # FT
-        
-        # Red-edge slope (proxy for crop stress / subtle pigment changes)
-        'RedEdgeSlope': np.nanmean((red_edge3 - red_edge1) / (740 - 705 + 1e-6)), # TF
-    }
-
-    return np.fromiter(indices.values(), dtype=float)
-
-
-
 def extract_texture_features(img: np.ndarray, levels: int = 32) -> np.ndarray:
     red = img[3]
     nir = img[7]
@@ -205,6 +165,39 @@ def extract_texture_features(img: np.ndarray, levels: int = 32) -> np.ndarray:
         # 'correlation': graycoprops(glcm, 'correlation')[0, 0],
     }
     vals = np.fromiter(textures.values(), dtype=float)
+    return vals
+
+
+def extract_texture_features_with_nan(img, levels=32, mask=None):
+    red = img[3]
+    nir = img[7]
+    index_img = (nir - red) / (nir + red + 1e-6)
+
+    if mask is None:
+        mask = ~np.isnan(index_img)
+    
+    # Flatten valid region and check coverage
+    valid_pixels = index_img[mask]
+
+    # Rescale to 0–(levels-1) for GLCM
+    img_valid = np.zeros_like(index_img)
+    img_valid[:] = np.nan
+    img_valid[mask] = exposure.rescale_intensity(valid_pixels, out_range=(0, levels - 1)).astype(np.uint8)
+
+    # Fill NaNs with zero just to compute GLCM, then mask again
+    img_filled = np.nan_to_num(img_valid, nan=0).astype(np.uint8)
+
+    # GLCM: distances=[1], angles=[0°], levels must match scaled image
+    glcm = graycomatrix(img_filled, distances=[1], angles=[0], levels=levels, symmetric=True, normed=True)
+
+    # Compute GLCM props
+    features = {
+        'contrast': graycoprops(glcm, 'contrast')[0, 0],
+        'homogeneity': graycoprops(glcm, 'homogeneity')[0, 0],
+        'energy': graycoprops(glcm, 'energy')[0, 0],
+        'correlation': graycoprops(glcm, 'correlation')[0, 0],
+    }
+    vals = np.fromiter(features.values(), dtype=float)
     return vals
 
 
@@ -246,17 +239,12 @@ def load_msi_images(directory: Path, aug: bool = False) -> np.ndarray:
         with np.load(filename) as npz:
             arr = np.ma.MaskedArray(**npz)
             img = arr.data
-            # texture = extract_texture_features(img)
             img[arr.mask] = np.nan
             size = np.array([img.shape[1] * img.shape[2]])
             channel_mean = np.nanmean(img, axis=(1, 2))
-            # channel_std = np.nanstd(img, axis=(1,2))
-            # channel_min = np.nanpercentile(img, q=1, axis=(1, 2))
-            # channel_max = np.nanpercentile(img, q=99, axis=(1, 2))
-            # p1, p2, p3, p4 = np.nanpercentile(img, q=[10, 25, 75, 90], axis=(1, 2))
             p1, p2, p3 = np.nanpercentile(img, q=[1, 50, 99], axis=(1, 2))
             indices = compute_indices(img)
-            image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices], axis=0)) # variance?
+            image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices, size], axis=0))
 
             if aug and size > 9:
                 # for j in range(2): # two augs per large image
@@ -268,8 +256,7 @@ def load_msi_images(directory: Path, aug: bool = False) -> np.ndarray:
                 p1, p2, p3 = np.nanpercentile(img, q=[1, 50, 99], axis=(1, 2))
                 indices = compute_indices(new_img)
                 new_img[new_img == np.nan] = 0
-                # texture = extract_texture_features(new_img)
-                aug_image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices], axis=0))
+                aug_image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices, size], axis=0))
                 aug_ids.append(i)
     return np.array(image_list), np.array(aug_image_list), aug_ids
 
@@ -286,7 +273,7 @@ def load_hsi_airborne_images(directory: Path, pred: bool = False) -> np.ndarray:
             channel_mean = np.nanmean(img, axis=(1, 2))
             image_list.append(channel_mean)
     means = np.array(image_list)
-    pca = PCA(n_components=2)
+    pca = PCA(n_components=3)
     if pred:
         with open("output/models/pca_inst.pickle", "rb") as f:
             pca = pickle.load(f)
@@ -296,7 +283,7 @@ def load_hsi_airborne_images(directory: Path, pred: bool = False) -> np.ndarray:
         print(pca.explained_variance_ratio_)
         with open("output/models/pca_inst.pickle", "wb") as f:
                 pickle.dump(pca, f)
-    return means_pca[:, 1:]  # omit first component - noise
+    return means_pca  # omit first component - noise
 
 
 def spectral_angle_mapper(s1: np.ndarray, s2: np.ndarray) -> float:
@@ -305,16 +292,10 @@ def spectral_angle_mapper(s1: np.ndarray, s2: np.ndarray) -> float:
     return np.arccos(np.clip(dot_product / (norms + 1e-6), -1.0, 1.0))
 
 
-# MINERALS = [
-#         "Goethite", "Hematite", "Chalcopyrite", "Malachite", "Pyrolusite",
-#         "Rhodochrosite", "Sphalerite", "Ulexite", "Gypsum"
-#     ]
-MINERALS = [
+def extract_sam_features_from_prisma_image(prisma_image: np.ndarray, usgs_reflectances: pd.DataFrame) -> np.ndarray:
+    MINERALS = [
         "Goethite", "Hematite", "Gypsum", "Chalcopyrite", "Sphalerite", "Pyrolusite", "Ulexite"
     ]
-# MINERALS = ["Goethite"]
-
-def extract_sam_features_from_prisma_image(prisma_image: np.ndarray, usgs_reflectances: pd.DataFrame) -> np.ndarray:
     mean_spectrum = np.nanmean(prisma_image, axis=(1, 2))  # shape: (bands,)
     features = []
     for mineral in MINERALS:
@@ -334,6 +315,57 @@ def load_minerals(directory: Path) -> np.ndarray:
             img = arr.data
             sam_features = extract_sam_features_from_prisma_image(img, usgs)
             image_list.append(sam_features)
+    return np.array(image_list)
+
+
+def compute_spectral_derivatives(img: np.ndarray, wavelengths: np.ndarray = None) -> np.ndarray:
+    mean_spectrum = np.nanmean(img, axis=(1, 2))
+
+    d1 = np.gradient(mean_spectrum)
+    d2 = np.gradient(d1)
+
+    regions = {
+        'VNIR': (0, 67),
+        'SWIR1': (67, 123),
+        'SWIR2': (123, 230)
+    }
+
+    features = []
+
+    for name, (low, high) in regions.items():
+        d1_region = d1[low:high]
+        d2_region = d2[low:high]
+
+        # First derivative features
+        features.append(np.nanmean(d1_region))
+        features.append(np.nanstd(d1_region))
+        features.append(np.nanmax(d1_region))
+        features.append(np.nanmin(d1_region))
+
+        # Second derivative features
+        features.append(np.nanmean(d2_region))
+        features.append(np.nanstd(d2_region))
+        features.append(np.nanmax(d2_region))
+        features.append(np.nanmin(d2_region))
+
+    features.append(np.nanmean(d1))
+    features.append(np.nanmean(d2))
+    return np.array(features)
+
+
+def load_derivatives(directory: Path) -> np.ndarray:
+    filenames = [f for f in Path(directory).rglob("*.npz") if "hsi_satellite" in str(f)]
+    filenames = sorted(filenames, key=lambda i: int(i.name.split(".")[0]))
+    image_list = []
+    for filename in filenames:
+        with np.load(filename) as npz:
+            arr = np.ma.MaskedArray(**npz)
+            img = arr.data
+            # first_deriv = np.diff(img, axis=0)
+            # second_deriv = np.diff(first_deriv, axis=0)
+            # image_list.append(np.array([np.nanmean(first_deriv), np.nanmean(second_deriv)]))
+            der = compute_spectral_derivatives(img)
+            image_list.append(der)
     return np.array(image_list)
 
 
