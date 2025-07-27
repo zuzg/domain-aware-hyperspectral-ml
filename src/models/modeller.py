@@ -31,25 +31,33 @@ class Modeller(nn.Module):
             self.softmax = nn.Softmax(dim=1)
 
         self.conv1 = nn.Conv2d(channels, 512, kernel_size=1)
-        self.lrelu1 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
+        self.lrelu1 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
         # self.norm1 = nn.BatchNorm2d(256)
         self.conv2 = nn.Conv2d(512, 1024, kernel_size=1)
-        self.lrelu2 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
+        self.lrelu2 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
         # self.norm2 = nn.BatchNorm2d(128)
         self.conv3 = nn.Conv2d(1024, 512, kernel_size=1)
-        self.lrelu3 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
+        self.lrelu3 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
         # self.norm2 = nn.BatchNorm2d(128)
         self.conv4 = nn.Conv2d(512, 256, kernel_size=1)
-        self.lrelu4 = nn.LeakyReLU(negative_slope = 0.1, inplace=True)
+        self.lrelu4 = nn.LeakyReLU(negative_slope=0.1, inplace=True)
         self.conv5 = nn.Conv2d(256, self.num_params * self.k, kernel_size=1)
         # self.norm = nn.BatchNorm2d(self.num_params * self.k, momentum=0.1)
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
 
-        nn.init.xavier_uniform_(self.conv1.weight, gain=nn.init.calculate_gain("leaky_relu"))
-        nn.init.xavier_uniform_(self.conv2.weight, gain=nn.init.calculate_gain("leaky_relu"))
-        nn.init.xavier_uniform_(self.conv3.weight, gain=nn.init.calculate_gain("leaky_relu"))
-        nn.init.xavier_uniform_(self.conv4.weight, gain=nn.init.calculate_gain("leaky_relu"))
+        nn.init.xavier_uniform_(
+            self.conv1.weight, gain=nn.init.calculate_gain("leaky_relu")
+        )
+        nn.init.xavier_uniform_(
+            self.conv2.weight, gain=nn.init.calculate_gain("leaky_relu")
+        )
+        nn.init.xavier_uniform_(
+            self.conv3.weight, gain=nn.init.calculate_gain("leaky_relu")
+        )
+        nn.init.xavier_uniform_(
+            self.conv4.weight, gain=nn.init.calculate_gain("leaky_relu")
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.lrelu1(self.conv1(x))

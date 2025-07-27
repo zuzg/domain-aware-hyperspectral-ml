@@ -2,17 +2,18 @@ import logging
 
 import numpy as np
 import torch
+import wandb
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 from torchinfo import summary
 
-import wandb
 from src.config import ExperimentConfig
 from src.consts import (
     ARCHITECTURES_PATH,
     DATA_PATH,
     MAX_PATH,
     MEAN_PATH,
+    MODELS_PATH,
     OUTPUT_PATH,
     RENDERERS_DICT,
     SPLIT_RATIO,
@@ -40,7 +41,9 @@ def collate_fn_pad(batch: Tensor):
 
     padded_batch = []
     for img in batch:
-        padded_img = nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))  # Pad to max size
+        padded_img = nn.functional.pad(
+            img, (0, max_w - img.shape[2], 0, max_h - img.shape[1])
+        )  # Pad to max size
         padded_batch.append(padded_img)
 
     return torch.stack(padded_batch)  # Stack into a single tensor
@@ -61,7 +64,10 @@ class Experiment:
             pre = "[DUAL]"
         else:
             pre = ""
-        return pre + f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}"
+        return (
+            pre
+            + f"var={self.cfg.variance_renderer}_bias={self.cfg.bias_renderer}_k={self.cfg.k}"
+        )
 
     def _initialize_wandb(self) -> None:
         wandb.init(
@@ -76,21 +82,61 @@ class Experiment:
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
             HyperviewDataset(
-                DATA_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=False, bias_path=MEAN_PATH
+                DATA_PATH,
+                TEST_IDS,
+                self.cfg.img_size,
+                self.cfg.max_val,
+                0,
+                div,
+                mask=False,
+                bias_path=MEAN_PATH,
             ),
             HyperviewDataset(
-                TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=False, bias_path=MEAN_PATH
+                TRAIN_PATH,
+                splits[1],
+                self.cfg.img_size,
+                self.cfg.max_val,
+                0,
+                div,
+                mask=False,
+                bias_path=MEAN_PATH,
             ),
             HyperviewDataset(
-                TRAIN_PATH, TRAIN_IDS, self.cfg.img_size, self.cfg.max_val, 0, div, mask=False, bias_path=MEAN_PATH
+                TRAIN_PATH,
+                TRAIN_IDS,
+                self.cfg.img_size,
+                self.cfg.max_val,
+                0,
+                div,
+                mask=False,
+                bias_path=MEAN_PATH,
             ),
         )
 
-    def prepare_dataloaders(self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
+    def prepare_dataloaders(
+        self, trainset: Dataset, valset: Dataset, testset: Dataset
+    ) -> tuple[DataLoader]:
         return (
-            DataLoader(trainset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True),
-            DataLoader(valset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_pad, drop_last=True),
-            DataLoader(testset, batch_size=self.cfg.batch_size, collate_fn=collate_fn_pad, drop_last=False),
+            DataLoader(
+                trainset,
+                batch_size=self.cfg.batch_size,
+                shuffle=True,
+                collate_fn=collate_fn_pad,
+                drop_last=True,
+            ),
+            DataLoader(
+                valset,
+                batch_size=self.cfg.batch_size,
+                shuffle=True,
+                collate_fn=collate_fn_pad,
+                drop_last=True,
+            ),
+            DataLoader(
+                testset,
+                batch_size=self.cfg.batch_size,
+                collate_fn=collate_fn_pad,
+                drop_last=False,
+            ),
         )
 
     def _load_max_values(self) -> np.ndarray:
@@ -101,43 +147,63 @@ class Experiment:
 
     def _setup_autoencoder(self, div: np.ndarray) -> nn.Module:
         self.num_params = 3
-        variance_model = Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        variance_model = Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(
+            self.cfg.device
+        )
         return variance_model
 
     def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
-        modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
-        renderer = variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type)
+        modeller = Modeller(
+            self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params
+        ).to(self.cfg.device)
+        renderer = variance_renderer.model(
+            self.cfg.device, self.cfg.channels, self.cfg.mu_type
+        )
         if self.cfg.dual_mode:
             return DualModeAutoencoder(
-                modeller, renderer, self.cfg.batch_size, self.cfg.img_size, self.cfg.k, self.num_params
+                modeller,
+                renderer,
+                self.cfg.batch_size,
+                self.cfg.img_size,
+                self.cfg.k,
+                self.num_params,
             )
         return VarianceModel(modeller, renderer)
 
     def _prepare_bias_model(self, div: np.ndarray) -> nn.Module:
         if self.cfg.bias_renderer == "Mean":
-            return mean_path_to_bias(MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size)
+            return mean_path_to_bias(
+                MEAN_PATH, div, self.cfg.device, self.cfg.img_size, self.cfg.batch_size
+            )
 
         elif self.cfg.bias_renderer == "None":
             return 0
 
         else:
             bias_renderer = RENDERERS_DICT[self.cfg.bias_renderer]
-            bias_renderer_model = bias_renderer.model(self.cfg.device, self.cfg.channels)
+            bias_renderer_model = bias_renderer.model(
+                self.cfg.device, self.cfg.channels
+            )
             bias_shape = (self.cfg.k, bias_renderer.num_params)
             bias_model = BiasModel(
-                bias_shape, self.cfg.batch_size, self.cfg.img_size, bias_renderer_model, self.cfg.device
+                bias_shape,
+                self.cfg.batch_size,
+                self.cfg.img_size,
+                bias_renderer_model,
+                self.cfg.device,
             )
 
             # bias_model = pretrain(bias_model, self.trainloader, self.cfg)
             for param in bias_model.parameters():
                 param.requires_grad = False
         return bias_model
-    
+
     def _init_dirs(self) -> None:
         OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
         ARCHITECTURES_PATH.mkdir(parents=True, exist_ok=True)
+        MODELS_PATH.mkdir(parents=True, exist_ok=True)
         SUBMISSION_PATH.mkdir(parents=True, exist_ok=True)
 
     def run(self) -> None:
@@ -149,19 +215,28 @@ class Experiment:
         self.cfg.channels = trainset.channels
         if not self.cfg.save_model:
             modeller = Modeller(self.cfg.img_size, self.cfg.channels, self.cfg.k, 5)
-            modeller.load_state_dict(
-                torch.load(self.cfg.modeller_path)
-            )
+            modeller.load_state_dict(torch.load(self.cfg.modeller_path))
             modeller = modeller.to(self.cfg.device)
             predict_soil_parameters(testset, modeller, 5, self.cfg, self.ae)
 
         else:
-            self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
-            model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
+            self.trainloader, self.valloader, self.testloader = (
+                self.prepare_dataloaders(trainset, valset, testset)
+            )
+            model = (
+                self._setup_autoencoder(max_values)
+                if self.ae
+                else self._setup_bias_variance_model(max_values)
+            )
             if self.cfg.wandb:
                 modeller_summary = summary(
                     model,
-                    input_size=(self.cfg.batch_size, self.cfg.channels, self.cfg.img_size, self.cfg.img_size),
+                    input_size=(
+                        self.cfg.batch_size,
+                        self.cfg.channels,
+                        self.cfg.img_size,
+                        self.cfg.img_size,
+                    ),
                 )
                 with open(ARCHITECTURES_PATH / f"{self.name}.txt", "w") as f:
                     f.write(str(modeller_summary))
@@ -177,16 +252,18 @@ class Experiment:
             model = train(model, self.trainloader, self.valloader, self.cfg)
 
             modeller = model.encoder if self.ae else model.modeller
-            torch.save(
-                modeller.state_dict(), self.cfg.modeller_path
-            )
+            torch.save(modeller.state_dict(), self.cfg.modeller_path)
 
             if self.cfg.wandb:
                 div = max_values.reshape(max_values.shape[0], 1, 1)
                 div = div[trainset.water_mask]
                 log.info("Evaluating")
-                Evaluator(model, self.cfg, self.ae, testset.bias / div).evaluate(self.testloader)
+                Evaluator(model, self.cfg, self.ae, testset.bias / div).evaluate(
+                    self.testloader
+                )
             if self.cfg.predict_soil:
                 log.info("Predicting soil parameters")
-                predict_soil_parameters(testset, modeller, self.num_params, self.cfg, self.ae)
+                predict_soil_parameters(
+                    testset, modeller, self.num_params, self.cfg, self.ae
+                )
         wandb.finish()

@@ -13,7 +13,9 @@ from torch import Tensor, nn
 from xgboost import XGBRegressor
 
 
-def compute_masks(img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor) -> tuple[Tensor]:
+def compute_masks(
+    img: Tensor, gt: Tensor, mask: Tensor, gt_div_tensor: Tensor
+) -> tuple[Tensor]:
     expanded_mask = mask.unsqueeze(1)
     crop_mask = expanded_mask.expand(-1, gt.shape[1], -1, -1)
     masked_gt = torch.where(crop_mask == 0, gt, torch.zeros_like(gt))
@@ -28,8 +30,12 @@ def collate_fn_pad_full(batch: Tensor):
     padded_imgs = []
     padded_gts = []
     for img, gt in batch:
-        padded_img = nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))
-        padded_gt = nn.functional.pad(gt, (0, max_w - gt.shape[2], 0, max_h - gt.shape[1]))
+        padded_img = nn.functional.pad(
+            img, (0, max_w - img.shape[2], 0, max_h - img.shape[1])
+        )
+        padded_gt = nn.functional.pad(
+            gt, (0, max_w - gt.shape[2], 0, max_h - gt.shape[1])
+        )
         padded_imgs.append(padded_img)
         padded_gts.append(padded_gt)
 
@@ -55,7 +61,7 @@ MODELS_CONFIG: dict[str, ModelConfig] = {
             "min_samples_split": [2, 5, 10],
             "min_samples_leaf": [1, 2, 4],
             "max_features": ["sqrt", "log2"],
-            "criterion": ["squared_error"],# "absolute_error", "poisson"],
+            "criterion": ["squared_error"],  # "absolute_error", "poisson"],
         },
     ),
     "AdaBoost": ModelConfig(
@@ -144,7 +150,6 @@ MODELS_CONFIG: dict[str, ModelConfig] = {
         name="ElasticNet",
         model=ElasticNet,
         default_params={"alpha": 1.0},
-        hyperparameters={}
-    )
-    
+        hyperparameters={},
+    ),
 }

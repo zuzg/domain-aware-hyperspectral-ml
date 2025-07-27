@@ -7,7 +7,14 @@ from src.models.renderers.base_renderer import BaseRenderer
 
 
 class BiasModel(nn.Module):
-    def __init__(self, shape: tuple[int], batch_size: int, img_size: int, renderer: BaseRenderer, device: str):
+    def __init__(
+        self,
+        shape: tuple[int],
+        batch_size: int,
+        img_size: int,
+        renderer: BaseRenderer,
+        device: str,
+    ):
         super().__init__()
         rand_init = torch.FloatTensor(np.zeros(shape)).uniform_(0, 1)
         rand_init = rand_init.to(device)

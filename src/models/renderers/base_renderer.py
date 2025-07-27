@@ -8,6 +8,7 @@ class BaseRenderer(ABC):
     """
     Abstract base class for renderers
     """
+
     def __init__(self, device: str, channels: int) -> None:
         self.device = device
         self.channels = channels

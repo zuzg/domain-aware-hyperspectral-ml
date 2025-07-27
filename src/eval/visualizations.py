@@ -21,12 +21,29 @@ def plot_partial_betas(betas: Tensor, channels: int) -> None:
         params = params.numpy()
         dist = beta.pdf(channels_div, params[0], params[1])
         beta_sum += dist
-        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"alpha={params[0]:.2f}, beta={params[1]:.2f}"))
+        fig.add_traces(
+            go.Scatter(
+                x=x,
+                y=dist,
+                mode="lines",
+                name=f"alpha={params[0]:.2f}, beta={params[1]:.2f}",
+            )
+        )
 
     fig.add_traces(
-        go.Scatter(x=x, y=beta_sum + shift, mode="lines", name=f"Sum of betas, shift={shift:.2}", line_color="black")
+        go.Scatter(
+            x=x,
+            y=beta_sum + shift,
+            mode="lines",
+            name=f"Sum of betas, shift={shift:.2}",
+            line_color="black",
+        )
     )
-    fig.update_layout(title="Partial betas for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+    fig.update_layout(
+        title="Partial betas for a random pixel",
+        xaxis_title="Band",
+        yaxis_title="Intensity",
+    )
     wandb.log({"partial_betas": fig})
 
 
@@ -50,16 +67,35 @@ def plot_partial_hats(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
         sigma, scale = channels * stats[1], channels * stats[2]
         dist = scale * norm.pdf(range(0, channels), mu, sigma)
         hat_sum += dist
-        fig.add_traces(go.Scatter(x=x, y=dist, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}"))
+        fig.add_traces(
+            go.Scatter(
+                x=x,
+                y=dist,
+                mode="lines",
+                name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}",
+            )
+        )
 
     fig.add_traces(
-        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
+        go.Scatter(
+            x=x,
+            y=hat_sum + shift,
+            mode="lines",
+            name=f"Sum of hats, shift={shift:.2}",
+            line_color="black",
+        )
     )
-    fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+    fig.update_layout(
+        title="Partial hats for a random pixel",
+        xaxis_title="Band",
+        yaxis_title="Intensity",
+    )
     wandb.log({"partial_hats": fig})
 
 
-def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int) -> None:
+def plot_partial_hats_asymmetric(
+    pixel_hats: Tensor, mu_type: str, channels: int
+) -> None:
     fig = go.Figure()
     x = np.linspace(1, channels, num=channels)
     shift = pixel_hats[0][4].numpy()
@@ -69,7 +105,11 @@ def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int
     for i, stats in enumerate(pixel_hats):
         stats = stats.numpy()
         mu = channels * stats[0]
-        sigma_left, sigma_right, scale = channels * stats[1], channels * stats[2], channels * stats[3]
+        sigma_left, sigma_right, scale = (
+            channels * stats[1],
+            channels * stats[2],
+            channels * stats[3],
+        )
 
         dist = np.zeros(channels)
         for idx in range(channels):
@@ -89,13 +129,29 @@ def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int
         )
 
     fig.add_traces(
-        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
+        go.Scatter(
+            x=x,
+            y=hat_sum + shift,
+            mode="lines",
+            name=f"Sum of hats, shift={shift:.2}",
+            line_color="black",
+        )
     )
-    fig.update_layout(title="Partial hats for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+    fig.update_layout(
+        title="Partial hats for a random pixel",
+        xaxis_title="Band",
+        yaxis_title="Intensity",
+    )
     wandb.log({"partial_hats": fig})
 
 
-def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx: int = 0, key: str = "partial_hats") -> None:
+def plot_partial_hats_skew(
+    pixel_hats: Tensor,
+    mu_type: str,
+    channels: int,
+    idx: int = 0,
+    key: str = "partial_hats",
+) -> None:
     fig = go.Figure()
     x = np.linspace(1, channels, num=channels)
     shift = pixel_hats[0][3].numpy()
@@ -111,16 +167,32 @@ def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx:
 
         # Generate skew-normal PDF
         x_vals = np.linspace(0, channels, num=channels)
-        pdf = 2 * scale * norm.pdf(x_vals, mu, sigma) * norm.cdf(skew * (x_vals - mu) / sigma)
+        pdf = (
+            2
+            * scale
+            * norm.pdf(x_vals, mu, sigma)
+            * norm.cdf(skew * (x_vals - mu) / sigma)
+        )
 
         hat_sum += pdf
         fig.add_traces(
-            go.Scatter(x=x, y=pdf, mode="lines", name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}, skew={skew:.1f}")
+            go.Scatter(
+                x=x,
+                y=pdf,
+                mode="lines",
+                name=f"μ={mu:.1f}, σ={sigma:.1f}, scale={scale:.1f}, skew={skew:.1f}",
+            )
         )
         # np.save(f"output/spectres/{idx}_{key}_{i}.npy", pdf)
 
     fig.add_traces(
-        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
+        go.Scatter(
+            x=x,
+            y=hat_sum + shift,
+            mode="lines",
+            name=f"Sum of hats, shift={shift:.2}",
+            line_color="black",
+        )
     )
 
     fig.update_layout(
@@ -137,8 +209,16 @@ def plot_partial_polynomials(polys: Tensor, channels: int) -> None:
     for i, params in enumerate(polys):
         params = params.numpy()
         poly = params[0] * x ** params[1]
-        fig.add_traces(go.Scatter(x=x, y=poly, mode="lines", name=f"{params[0]:.2f}*x^{params[1]:.2f}"))
-    fig.update_layout(title="Partial functions for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+        fig.add_traces(
+            go.Scatter(
+                x=x, y=poly, mode="lines", name=f"{params[0]:.2f}*x^{params[1]:.2f}"
+            )
+        )
+    fig.update_layout(
+        title="Partial functions for a random pixel",
+        xaxis_title="Band",
+        yaxis_title="Intensity",
+    )
     wandb.log({"partial_polys": fig})
 
 
@@ -149,8 +229,16 @@ def plot_partial_polynomials_degree(polys: Tensor, k: int, channels: int) -> Non
     for i, params in enumerate(polys):
         params = params.numpy()
         poly = params[0] * x ** exp[i]
-        fig.add_traces(go.Scatter(x=x, y=poly, mode="lines", name=f"{params[0]:.2f}*x^{exp[i]:.0f}"))
-    fig.update_layout(title="Partial functions for a random pixel", xaxis_title="Band", yaxis_title="Intensity")
+        fig.add_traces(
+            go.Scatter(
+                x=x, y=poly, mode="lines", name=f"{params[0]:.2f}*x^{exp[i]:.0f}"
+            )
+        )
+    fig.update_layout(
+        title="Partial functions for a random pixel",
+        xaxis_title="Band",
+        yaxis_title="Intensity",
+    )
     wandb.log({"partial_polys_degree": fig})
 
 
@@ -182,8 +270,12 @@ def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor, key: str) -> None
     fig = plt.figure(figsize=(10, 5))
     pred_img[gt_img == 0] = np.nan
     gt_img[gt_img == 0] = np.nan
-    gt_mean_spectral_reflectance = [np.nanmean(gt_img[i]) for i in range(gt_img.shape[0])]
-    pred_mean_spectral_reflectance = [np.nanmean(pred_img[i]) for i in range(pred_img.shape[0])]
+    gt_mean_spectral_reflectance = [
+        np.nanmean(gt_img[i]) for i in range(gt_img.shape[0])
+    ]
+    pred_mean_spectral_reflectance = [
+        np.nanmean(pred_img[i]) for i in range(pred_img.shape[0])
+    ]
     plt.plot(pred_mean_spectral_reflectance, label="PRED")
     plt.plot(gt_mean_spectral_reflectance, label="GT")
     plt.xlabel("Band")

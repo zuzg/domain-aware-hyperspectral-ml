@@ -21,19 +21,25 @@ def collate_fn_pad(batch):
 
     padded_batch = []
     for img in batch:
-        padded_img = nn.functional.pad(img, (0, max_w - img.shape[2], 0, max_h - img.shape[1]))
+        padded_img = nn.functional.pad(
+            img, (0, max_w - img.shape[2], 0, max_h - img.shape[1])
+        )
         padded_batch.append(padded_img)
 
     return torch.stack(padded_batch)
 
 
-def apply_baseline_mask(data: np.ndarray, mask: np.ndarray, channels: int) -> np.ndarray:
+def apply_baseline_mask(
+    data: np.ndarray, mask: np.ndarray, channels: int
+) -> np.ndarray:
     expanded_mask = np.expand_dims(mask, axis=1)
     crop_mask = np.repeat(expanded_mask, repeats=channels, axis=1)
     return np.where(crop_mask == 0, data, 0)
 
 
-def apply_non_baseline_mask(pred: np.ndarray, mask: np.ndarray, k: int, num_params: int, ae: bool) -> np.ndarray:
+def apply_non_baseline_mask(
+    pred: np.ndarray, mask: np.ndarray, k: int, num_params: int, ae: bool
+) -> np.ndarray:
     if ae:
         expanded_mask = np.expand_dims(mask, axis=1)
         crop_mask = np.repeat(expanded_mask, repeats=k * num_params, axis=1)
@@ -41,7 +47,9 @@ def apply_non_baseline_mask(pred: np.ndarray, mask: np.ndarray, k: int, num_para
         shift = pred[:, 0, num_params - 2 : num_params - 1]
         pred[:, :, num_params - 2] = shift  # TODO drop instead of copying
         expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
-        crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
+        crop_mask = np.repeat(
+            np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2
+        )
     return np.where(crop_mask == 0, pred, 0)
 
 
@@ -56,7 +64,13 @@ def prepare_datasets(
     ae: bool = False,
     baseline: bool = False,
 ) -> np.ndarray:
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collate_fn_pad)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        drop_last=True,
+        collate_fn=collate_fn_pad,
+    )
     features = []
     img_means = []
     model.eval()
@@ -79,7 +93,9 @@ def prepare_datasets(
     # sort by mu
     sort_key = features[:, :, :, 0, :, :]
     sort_indices = np.argsort(sort_key, axis=2)
-    sorted_features = np.take_along_axis(features, np.expand_dims(sort_indices, axis=3), axis=2)
+    sorted_features = np.take_along_axis(
+        features, np.expand_dims(sort_indices, axis=3), axis=2
+    )
 
     f_dim = channels if baseline else k * num_params
     sorted_features = sorted_features.reshape(
@@ -89,7 +105,9 @@ def prepare_datasets(
     drop_indices = [i * num_params + 3 for i in range(1, k)]
     # Remove those feature channels
     features_filtered = np.delete(sorted_features, drop_indices, axis=1)
-    return features_filtered, img_means.reshape(features.shape[0] * batch_size, img_means.shape[-1])
+    return features_filtered, img_means.reshape(
+        features.shape[0] * batch_size, img_means.shape[-1]
+    )
 
 
 def prepare_gt(ids: np.ndarray) -> pd.DataFrame:
@@ -132,14 +150,13 @@ def compute_indices(img: np.ndarray) -> np.ndarray:
     swir2 = img[11]
 
     indices = {
-        'NDVI': np.nanmean((nir - red) / (nir + red + 1e-6)),
-        'EVI': np.nanmean(2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1)),
-        'NDWI': np.nanmean((nir - swir1) / (nir + swir1 + 1e-6)),
-        'SAVI': np.nanmean((1.5 * (nir - red)) / (nir + red + 0.5 + 1e-6)),
-        'ClayIndex': np.nanmean(swir1 / (swir2 + 1e-6)),
-        'IronOxideIndex': np.nanmean(red / (blue + 1e-6)),
-        'NDSI': np.nanmean((swir1 - green) / (swir1 + green + 1e-6)),
-
+        "NDVI": np.nanmean((nir - red) / (nir + red + 1e-6)),
+        "EVI": np.nanmean(2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1)),
+        "NDWI": np.nanmean((nir - swir1) / (nir + swir1 + 1e-6)),
+        "SAVI": np.nanmean((1.5 * (nir - red)) / (nir + red + 0.5 + 1e-6)),
+        "ClayIndex": np.nanmean(swir1 / (swir2 + 1e-6)),
+        "IronOxideIndex": np.nanmean(red / (blue + 1e-6)),
+        "NDSI": np.nanmean((swir1 - green) / (swir1 + green + 1e-6)),
         # 'NDVI_s': np.nanstd((nir - red) / (nir + red + 1e-6)),
         # 'EVI_s': np.nanstd(2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1)),
         # 'NDWI_s': np.nanstd((nir - swir1) / (nir + swir1 + 1e-6)),
@@ -156,11 +173,15 @@ def extract_texture_features(img: np.ndarray, levels: int = 32) -> np.ndarray:
     red = img[3]
     nir = img[7]
     index_img = (nir - red) / (nir + red + 1e-6)
-    img_scaled = exposure.rescale_intensity(index_img, out_range=(0, levels - 1)).astype(np.uint8)
-    glcm = graycomatrix(img_scaled, [1], [0], levels=levels, symmetric=True, normed=True)
-    textures =  {
-        'contrast': graycoprops(glcm, 'contrast')[0, 0],
-        'homogeneity': graycoprops(glcm, 'homogeneity')[0, 0],
+    img_scaled = exposure.rescale_intensity(
+        index_img, out_range=(0, levels - 1)
+    ).astype(np.uint8)
+    glcm = graycomatrix(
+        img_scaled, [1], [0], levels=levels, symmetric=True, normed=True
+    )
+    textures = {
+        "contrast": graycoprops(glcm, "contrast")[0, 0],
+        "homogeneity": graycoprops(glcm, "homogeneity")[0, 0],
         # 'energy': graycoprops(glcm, 'energy')[0, 0],
         # 'correlation': graycoprops(glcm, 'correlation')[0, 0],
     }
@@ -175,27 +196,36 @@ def extract_texture_features_with_nan(img, levels=32, mask=None):
 
     if mask is None:
         mask = ~np.isnan(index_img)
-    
+
     # Flatten valid region and check coverage
     valid_pixels = index_img[mask]
 
     # Rescale to 0–(levels-1) for GLCM
     img_valid = np.zeros_like(index_img)
     img_valid[:] = np.nan
-    img_valid[mask] = exposure.rescale_intensity(valid_pixels, out_range=(0, levels - 1)).astype(np.uint8)
+    img_valid[mask] = exposure.rescale_intensity(
+        valid_pixels, out_range=(0, levels - 1)
+    ).astype(np.uint8)
 
     # Fill NaNs with zero just to compute GLCM, then mask again
     img_filled = np.nan_to_num(img_valid, nan=0).astype(np.uint8)
 
     # GLCM: distances=[1], angles=[0°], levels must match scaled image
-    glcm = graycomatrix(img_filled, distances=[1], angles=[0], levels=levels, symmetric=True, normed=True)
+    glcm = graycomatrix(
+        img_filled,
+        distances=[1],
+        angles=[0],
+        levels=levels,
+        symmetric=True,
+        normed=True,
+    )
 
     # Compute GLCM props
     features = {
-        'contrast': graycoprops(glcm, 'contrast')[0, 0],
-        'homogeneity': graycoprops(glcm, 'homogeneity')[0, 0],
-        'energy': graycoprops(glcm, 'energy')[0, 0],
-        'correlation': graycoprops(glcm, 'correlation')[0, 0],
+        "contrast": graycoprops(glcm, "contrast")[0, 0],
+        "homogeneity": graycoprops(glcm, "homogeneity")[0, 0],
+        "energy": graycoprops(glcm, "energy")[0, 0],
+        "correlation": graycoprops(glcm, "correlation")[0, 0],
     }
     vals = np.fromiter(features.values(), dtype=float)
     return vals
@@ -206,10 +236,12 @@ def center_crop(img: np.ndarray, size: tuple[int, int]) -> np.ndarray:
     ch, cw = size
     starth = h // 2 - (ch // 2)
     startw = w // 2 - (cw // 2)
-    return img[:, starth:starth + ch, startw:startw + cw]
+    return img[:, starth : starth + ch, startw : startw + cw]
 
 
-def random_crop(img: np.ndarray, size: tuple[int, int], max_attempts: int = 10) -> np.ndarray:
+def random_crop(
+    img: np.ndarray, size: tuple[int, int], max_attempts: int = 10
+) -> np.ndarray:
     c, h, w = img.shape
     ch, cw = size
     if ch > h or cw > w:
@@ -218,12 +250,14 @@ def random_crop(img: np.ndarray, size: tuple[int, int], max_attempts: int = 10) 
     for attempt in range(max_attempts):
         starth = np.random.randint(0, h - ch + 1)
         startw = np.random.randint(0, w - cw + 1)
-        crop = img[:, starth:starth + ch, startw:startw + cw]
+        crop = img[:, starth : starth + ch, startw : startw + cw]
 
         if not np.isnan(crop).all():
             return crop
 
-    raise RuntimeError("Failed to find a valid crop without all NaNs after multiple attempts.")
+    raise RuntimeError(
+        "Failed to find a valid crop without all NaNs after multiple attempts."
+    )
 
 
 DIMS = {4: (2, 2), 6: (3, 2), 7: (2, 3), 9: (3, 3)}
@@ -244,7 +278,9 @@ def load_msi_images(directory: Path, aug: bool = False) -> np.ndarray:
             channel_mean = np.nanmean(img, axis=(1, 2))
             p1, p2, p3 = np.nanpercentile(img, q=[1, 50, 99], axis=(1, 2))
             indices = compute_indices(img)
-            image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices, size], axis=0))
+            image_list.append(
+                np.concatenate([channel_mean, p1, p2, p3, indices, size], axis=0)
+            )
 
             if aug and size > 9:
                 # for j in range(2): # two augs per large image
@@ -256,7 +292,9 @@ def load_msi_images(directory: Path, aug: bool = False) -> np.ndarray:
                 p1, p2, p3 = np.nanpercentile(img, q=[1, 50, 99], axis=(1, 2))
                 indices = compute_indices(new_img)
                 new_img[new_img == np.nan] = 0
-                aug_image_list.append(np.concatenate([channel_mean, p1, p2, p3, indices, size], axis=0))
+                aug_image_list.append(
+                    np.concatenate([channel_mean, p1, p2, p3, indices, size], axis=0)
+                )
                 aug_ids.append(i)
     return np.array(image_list), np.array(aug_image_list), aug_ids
 
@@ -282,7 +320,7 @@ def load_hsi_airborne_images(directory: Path, pred: bool = False) -> np.ndarray:
         means_pca = pca.fit_transform(means)
         print(pca.explained_variance_ratio_)
         with open("output/models/pca_inst.pickle", "wb") as f:
-                pickle.dump(pca, f)
+            pickle.dump(pca, f)
     return means_pca  # omit first component - noise
 
 
@@ -292,9 +330,17 @@ def spectral_angle_mapper(s1: np.ndarray, s2: np.ndarray) -> float:
     return np.arccos(np.clip(dot_product / (norms + 1e-6), -1.0, 1.0))
 
 
-def extract_sam_features_from_prisma_image(prisma_image: np.ndarray, usgs_reflectances: pd.DataFrame) -> np.ndarray:
+def extract_sam_features_from_prisma_image(
+    prisma_image: np.ndarray, usgs_reflectances: pd.DataFrame
+) -> np.ndarray:
     MINERALS = [
-        "Goethite", "Hematite", "Gypsum", "Chalcopyrite", "Sphalerite", "Pyrolusite", "Ulexite"
+        "Goethite",
+        "Hematite",
+        "Gypsum",
+        "Chalcopyrite",
+        "Sphalerite",
+        "Pyrolusite",
+        "Ulexite",
     ]
     mean_spectrum = np.nanmean(prisma_image, axis=(1, 2))  # shape: (bands,)
     features = []
@@ -318,17 +364,15 @@ def load_minerals(directory: Path) -> np.ndarray:
     return np.array(image_list)
 
 
-def compute_spectral_derivatives(img: np.ndarray, wavelengths: np.ndarray = None) -> np.ndarray:
+def compute_spectral_derivatives(
+    img: np.ndarray, wavelengths: np.ndarray = None
+) -> np.ndarray:
     mean_spectrum = np.nanmean(img, axis=(1, 2))
 
     d1 = np.gradient(mean_spectrum)
     d2 = np.gradient(d1)
 
-    regions = {
-        'VNIR': (0, 67),
-        'SWIR1': (67, 123),
-        'SWIR2': (123, 230)
-    }
+    regions = {"VNIR": (0, 67), "SWIR1": (67, 123), "SWIR2": (123, 230)}
 
     features = []
 
@@ -371,7 +415,12 @@ def load_derivatives(directory: Path) -> np.ndarray:
 
 class SoilDataset(Dataset):
     def __init__(
-        self, image_list: np.ndarray, size: int, gt: pd.DataFrame, gt_div: np.ndarray, shuffle: bool = True
+        self,
+        image_list: np.ndarray,
+        size: int,
+        gt: pd.DataFrame,
+        gt_div: np.ndarray,
+        shuffle: bool = True,
     ) -> None:
         super().__init__()
         self.size = size
@@ -393,7 +442,9 @@ class SoilDataset(Dataset):
 
     def _prepare_gt_values(self) -> torch.Tensor:
         num_images = len(self.images)
-        gt_values = torch.zeros((num_images, self.gt_dim, self.size, self.size), dtype=torch.float32)
+        gt_values = torch.zeros(
+            (num_images, self.gt_dim, self.size, self.size), dtype=torch.float32
+        )
 
         for i in range(num_images):
             soil = torch.from_numpy(self.gt.loc[i].values / self.gt_div).float()
@@ -423,7 +474,16 @@ class SoilDataset(Dataset):
 
 
 class ImgGtDataset(Dataset):
-    def __init__(self, directory: str, ids: np.ndarray, std, max_val, gt: pd.DataFrame, gt_div: np.ndarray, size: int):
+    def __init__(
+        self,
+        directory: str,
+        ids: np.ndarray,
+        std,
+        max_val,
+        gt: pd.DataFrame,
+        gt_div: np.ndarray,
+        size: int,
+    ):
         super().__init__()
         self.gt = gt
         self.ids = ids
@@ -433,7 +493,9 @@ class ImgGtDataset(Dataset):
         self.bias = self.load_bias(MEAN_PATH)
         self.images = self.load_images(directory)
         self.bias = self.bias[self.water_mask]
-        self.transform = transforms.Compose([transforms.Normalize(0, std[self.water_mask])])
+        self.transform = transforms.Compose(
+            [transforms.Normalize(0, std[self.water_mask])]
+        )
         self.gt_dim = len(gt_div)
         self.gt_values = self._prepare_gt_values()
 
@@ -446,7 +508,9 @@ class ImgGtDataset(Dataset):
 
     def _prepare_gt_values(self) -> torch.Tensor:
         num_images = len(self.images)
-        gt_values = torch.zeros((num_images, self.gt_dim, self.size, self.size), dtype=torch.float32)
+        gt_values = torch.zeros(
+            (num_images, self.gt_dim, self.size, self.size), dtype=torch.float32
+        )
 
         for i in range(num_images):
             soil = torch.from_numpy(self.gt.loc[i].values / self.gt_div).float()
@@ -454,7 +518,7 @@ class ImgGtDataset(Dataset):
             gt_values[i] = gt_unsqueezed.repeat(1, self.size, self.size)
 
         return gt_values
-    
+
     def delete_water_bands(self, img: np.ndarray) -> np.ndarray:
         channel_indices = np.arange(img.shape[0])
         keep_mask = np.ones(img.shape[0], dtype=bool)

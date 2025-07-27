@@ -8,7 +8,9 @@ from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
 
-def predict_params(x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray) -> np.ndarray:
+def predict_params(
+    x_train: np.ndarray, x_test: np.ndarray, y_train: np.ndarray, y_test: np.ndarray
+) -> np.ndarray:
     le = LabelEncoder()
     y_train = le.fit_transform(y_train)
     y_test = le.transform(y_test)
@@ -30,7 +32,9 @@ def samples_number_experiment(
         mses_for_sample = []
 
         for run in range(n_runs):
-            x_train_base, x_test, y_train_base, y_test = train_test_split(x, y, test_size=0.2, random_state=run)
+            x_train_base, x_test, y_train_base, y_test = train_test_split(
+                x, y, test_size=0.2, random_state=run
+            )
             x_train, y_train = x_train_base[:sn], y_train_base[:sn]
 
             acc, bacc = predict_params(x, x, y, y)
@@ -45,9 +49,7 @@ def samples_number_experiment(
     return np.array(mses_mean)
 
 
-def predict_soil_classes(
-features: np.ndarray, gt: np.ndarray
-) -> None:
+def predict_soil_classes(features: np.ndarray, gt: np.ndarray) -> None:
     samples = [len(features)]
 
     samples_number_experiment(features, gt, samples)

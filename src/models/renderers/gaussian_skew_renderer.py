@@ -11,7 +11,11 @@ class GaussianSkewRenderer(GaussianRenderer):
 
     def __call__(self, batch: Tensor) -> Tensor:
         batch_size, k, params, h, w = batch.shape
-        self.bands = torch.arange(1, self.channels + 1, device=self.device).float().repeat(k, h, w, 1)
+        self.bands = (
+            torch.arange(1, self.channels + 1, device=self.device)
+            .float()
+            .repeat(k, h, w, 1)
+        )
         rendered_list = []
 
         for idx in range(batch_size):
@@ -22,26 +26,36 @@ class GaussianSkewRenderer(GaussianRenderer):
                 batch[idx, :, 4, ...],  # skew
             )
             pixel_dist = torch.sum(dists, dim=0)
-            rendered_frame = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]  # Add bias
+            rendered_frame = (
+                pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]
+            )  # Add bias
             rendered_list.append(rendered_frame)
 
         rendered = torch.stack(rendered_list)
         return rendered.to(self.device)
 
-    def generate_distribution(self, mu: Tensor, sigma: Tensor, scale: Tensor, skew: Tensor) -> Tensor:
+    def generate_distribution(
+        self, mu: Tensor, sigma: Tensor, scale: Tensor, skew: Tensor
+    ) -> Tensor:
         eps = 1e-4
         sigma = torch.add(sigma, eps)
         if self.mu_type == "unconstrained":
             mu_transformed = self.channels * mu.unsqueeze(-1)
         elif self.mu_type == "fixed_reference":
-            mu_transformed = self.adjust_tensor_intervals(mu.unsqueeze(-1), self.channels)
+            mu_transformed = self.adjust_tensor_intervals(
+                mu.unsqueeze(-1), self.channels
+            )
         elif self.mu_type == "equal_interval":
-            mu_transformed = self.fix_intervals(mu.unsqueeze(-1), self.channels).to(self.device)
+            mu_transformed = self.fix_intervals(mu.unsqueeze(-1), self.channels).to(
+                self.device
+            )
 
         skew = self.channels * skew.unsqueeze(-1)
 
         # Generate standard normal CDF and PDF
-        normal_dist = Normal(mu_transformed, self.channels * sigma.unsqueeze(-1))  # sigma constrained - *15
+        normal_dist = Normal(
+            mu_transformed, self.channels * sigma.unsqueeze(-1)
+        )  # sigma constrained - *15
         pdf = torch.exp(normal_dist.log_prob(self.bands))
         cdf = normal_dist.cdf(skew * (self.bands - mu_transformed))
 

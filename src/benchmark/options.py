@@ -24,7 +24,10 @@ def parse_args() -> ExperimentConfig:
         ],
     )
     parser.add_argument(
-        "--mu_type", type=str, default="unconstrained", choices=["equal_interval", "fixed_reference", "unconstrained"]
+        "--mu_type",
+        type=str,
+        default="unconstrained",
+        choices=["equal_interval", "fixed_reference", "unconstrained"],
     )
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)

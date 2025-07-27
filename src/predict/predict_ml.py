@@ -17,8 +17,7 @@ from src.soil_params.data import (
 )
 
 
-def predict_params(
-    model: BaseEstimator, features: np.ndarray) -> np.ndarray:
+def predict_params(model: BaseEstimator, features: np.ndarray) -> np.ndarray:
     preds = model.predict(features)
     return preds
 
@@ -37,8 +36,25 @@ class Prediction:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
-        dataset = HyperviewDataset(TEST_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=False, bias_path=MEAN_PATH)
-        preds, _ = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, num_params, 1, self.cfg.device)
+        dataset = HyperviewDataset(
+            TEST_PATH,
+            TEST_IDS,
+            self.cfg.img_size,
+            self.cfg.max_val,
+            0,
+            maxx,
+            mask=False,
+            bias_path=MEAN_PATH,
+        )
+        preds, _ = prepare_datasets(
+            dataset,
+            modeller,
+            self.cfg.k,
+            self.cfg.channels,
+            num_params,
+            1,
+            self.cfg.device,
+        )
         preds_agg = aggregate_features(preds)
 
         msi_means, _, _ = load_msi_images(MSI_TEST_PATH)

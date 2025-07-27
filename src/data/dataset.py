@@ -36,7 +36,9 @@ class HyperviewDataset(Dataset):
         self.bias = self.load_bias(bias_path)
         self.images = self.load_images(directory)
         self.bias = self.bias[self.water_mask]
-        self.transform = transforms.Compose([transforms.Normalize(mean, std[self.water_mask])])#[self.water_mask]
+        self.transform = transforms.Compose(
+            [transforms.Normalize(mean, std[self.water_mask])]
+        )  # [self.water_mask]
 
     def __len__(self) -> int:
         return len(self.images)
@@ -49,7 +51,7 @@ class HyperviewDataset(Dataset):
         with open(bias_path, "rb") as f:
             bias = np.load(f)
         return bias.reshape(bias.shape[0], 1, 1)
-    
+
     def delete_water_bands(self, img: np.ndarray) -> np.ndarray:
         channel_indices = np.arange(img.shape[0])
         keep_mask = np.ones(img.shape[0], dtype=bool)
@@ -60,7 +62,9 @@ class HyperviewDataset(Dataset):
         return filtered_img
 
     def load_images(self, directory: str) -> list[Tensor]:
-        filenames = [f for f in Path(directory).rglob("*.npz") if "hsi_satellite" in str(f)]
+        filenames = [
+            f for f in Path(directory).rglob("*.npz") if "hsi_satellite" in str(f)
+        ]
         filenames = sorted(filenames, key=lambda i: int(i.name.split(".")[0]))
         image_list = []
         for filename in filenames:
@@ -83,7 +87,7 @@ class HyperviewDataset(Dataset):
                     # self.flat_masks.append(padded_flat_mask)
 
                     img[img > self.max_val] = self.max_val  # clip outliers to max_val
-                    self.size_list.append(img.shape[1]*img.shape[2])
+                    self.size_list.append(img.shape[1] * img.shape[2])
                     image_list.append(torch.from_numpy(img).float())
         self.channels = img.shape[0]
         return image_list
