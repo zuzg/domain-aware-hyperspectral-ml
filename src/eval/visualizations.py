@@ -95,10 +95,12 @@ def plot_partial_hats_asymmetric(pixel_hats: Tensor, mu_type: str, channels: int
     wandb.log({"partial_hats": fig})
 
 
-def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx: int = 0, key: str = "partial_hats") -> None:
+def plot_partial_hats_skew(
+    pixel_hats: Tensor, mu_type: str, channels: int, idx: int = 0, key: str = "partial_hats"
+) -> None:
     fig = go.Figure()
     x = np.linspace(1, channels, num=channels)
-    shift = pixel_hats[0][3].numpy()
+    # shift = pixel_hats[0][3].numpy()
     k = len(pixel_hats)
     hat_sum = np.zeros(channels)  # Sum of all distributions
 
@@ -107,7 +109,7 @@ def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx:
         mu = channels * stats[0]  # Mean
         sigma = channels * stats[1]  # Standard deviation
         scale = channels * stats[2]  # Scaling factor
-        skew = channels * stats[4]  # Skewness parameter
+        skew = channels * stats[3]  # Skewness parameter
 
         # Generate skew-normal PDF
         x_vals = np.linspace(0, channels, num=channels)
@@ -119,9 +121,7 @@ def plot_partial_hats_skew(pixel_hats: Tensor, mu_type: str, channels: int, idx:
         )
         # np.save(f"output/spectres/{idx}_{key}_{i}.npy", pdf)
 
-    fig.add_traces(
-        go.Scatter(x=x, y=hat_sum + shift, mode="lines", name=f"Sum of hats, shift={shift:.2}", line_color="black")
-    )
+    fig.add_traces(go.Scatter(x=x, y=hat_sum, mode="lines", name=f"Sum of hats", line_color="black"))
 
     fig.update_layout(
         title="Partial Hats for a Random Pixel",

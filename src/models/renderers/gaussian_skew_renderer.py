@@ -19,18 +19,16 @@ class GaussianSkewRenderer(GaussianRenderer):
                 batch[idx, :, 0, ...],  # mu
                 batch[idx, :, 1, ...],  # sigma
                 batch[idx, :, 2, ...],  # scale
-                batch[idx, :, 4, ...],  # skew
+                batch[idx, :, 3, ...],  # skew
             )
             pixel_dist = torch.sum(dists, dim=0)
-            rendered_frame = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 3, ...]  # Add bias
+            rendered_frame = pixel_dist.permute(2, 0, 1)  # + batch[idx, 0, 3, ...]  # Add bias
             rendered_list.append(rendered_frame)
 
         rendered = torch.stack(rendered_list)
         return rendered.to(self.device)
 
     def generate_distribution(self, mu: Tensor, sigma: Tensor, scale: Tensor, skew: Tensor) -> Tensor:
-        eps = 1e-4
-        sigma = torch.add(sigma, eps)
         if self.mu_type == "unconstrained":
             mu_transformed = self.channels * mu.unsqueeze(-1)
         elif self.mu_type == "fixed_reference":

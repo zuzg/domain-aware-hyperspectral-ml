@@ -34,7 +34,7 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
     "BetaRenderer": RendererConfig(BetaRenderer, 3),
     "GaussianRenderer": RendererConfig(GaussianRenderer, 4),
     "GaussianAsymmetricRenderer": RendererConfig(GaussianAsymmetricRenderer, 5),
-    "GaussianSkewRenderer": RendererConfig(GaussianSkewRenderer, 5),
+    "GaussianSkewRenderer": RendererConfig(GaussianSkewRenderer, 4),
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
     "SplineRenderer": RendererConfig(SplineRenderer, 1),
