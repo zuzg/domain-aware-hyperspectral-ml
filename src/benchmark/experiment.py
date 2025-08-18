@@ -5,6 +5,7 @@ import torch
 import wandb
 from torch.utils.data import DataLoader
 
+from src.benchmark.consts import DATA_DICT, DatasetConfig
 from src.benchmark.pred_ml import predict_soil_classes
 from src.config import ExperimentConfig
 from src.data.dataset import HyperpectralPatch
@@ -20,8 +21,11 @@ class BenchmarkExperiment(Experiment):
     def run(self) -> None:
         oa_fold, aa_fold = [], []
 
-        for fold in range(4):
-            oacc, aacc = self._run_single_fold(fold)
+        data_cfg = DATA_DICT[self.cfg.dataset_name]
+        self.cfg.channels = data_cfg.channels
+
+        for fold in range(data_cfg.folds):
+            oacc, aacc = self._run_single_fold(data_cfg, fold)
             oa_fold.append(oacc)
             aa_fold.append(aacc)
 
@@ -33,27 +37,33 @@ class BenchmarkExperiment(Experiment):
         )
         wandb.finish()
 
-    def _run_single_fold(self, fold: int) -> tuple[float, float]:
-        fold_dir = Path(self.cfg.fold_dir) / f"indiana_fold_{fold}"
+    def _run_single_fold(self, data_cfg: DatasetConfig, fold: int) -> tuple[float, float]:
+        fold_dir = Path(data_cfg.path) / f"{data_cfg.name}_fold_{fold}"
 
         trainset, predset, testset = self._prepare_datasets(fold_dir)
         trainloader, predloader, valloader, testloader = self._prepare_dataloaders(trainset, predset, testset)
 
         oacc_sum = 0
         aacc_sum = 0
+        run_num = 5
 
-        for run_idx in range(5):
-            model = self._setup_variance_model()
-            model = train(model, trainloader, None, self.cfg)
+        for run_idx in range(run_num):
+            model = self._setup_autoencoder() if self.ae else self._setup_bias_variance_model()
+            model = train(model, trainloader, trainloader, self.cfg)
 
-            # Evaluator(model, self.cfg, self.ae, 0).evaluate(valloader)
+            if fold == 0 and run_idx == 0:
+                print("Evaluating")
+                bias = trainset.channel_mean / trainset.channel_max
+                bias = bias.unsqueeze(1).unsqueeze(1).numpy()
+                Evaluator(model, self.cfg, self.ae, bias).evaluate(valloader)
+
             modeller = model.encoder if self.ae else model.modeller
 
             features_train = self._extract_features(modeller, predloader)
             features_test = self._extract_features(modeller, testloader)
 
-            features_train = features_train.transpose(0, 3, 4, 1, 2).reshape(-1, self.cfg.k * 5)
-            features_test = features_test.reshape(-1, self.cfg.k * 5)
+            features_train = features_train.transpose(0, 3, 4, 1, 2).reshape(-1, self.cfg.k * 4)  # num params
+            features_test = features_test.reshape(-1, self.cfg.k * 4)
 
             gt_train = np.array(predset.gt).reshape(-1)
             gt_test = np.array(testset.gt)
@@ -62,8 +72,8 @@ class BenchmarkExperiment(Experiment):
             oacc_sum += oacc
             aacc_sum += aacc
 
-        avg_oacc = oacc_sum / 5
-        avg_aacc = aacc_sum / 5
+        avg_oacc = oacc_sum / run_num
+        avg_aacc = aacc_sum / run_num
         return avg_oacc, avg_aacc
 
     def _prepare_datasets(self, fold_dir: Path):

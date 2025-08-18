@@ -97,9 +97,9 @@ class HyperpectralPatch(Dataset):
             self.w = w
         else:
             self.patches, self.channel_max, self.channel_mean = self.load_patches(fold_dir)
-            self.ch = self.patches[0].shape[1]
+            self.ch = self.patches[0].shape[0]
             self.h = self.patches[0].shape[1]
-            self.w = self.patches[0].shape[w]
+            self.w = self.patches[0].shape[2]
             if extra:
                 test_patches = self.load_patches_test(fold_dir)
                 self.patches = torch.cat([self.patches, test_patches], dim=0)

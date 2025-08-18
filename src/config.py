@@ -35,7 +35,7 @@ class ExperimentConfig:
     submission_path: str
 
     alpha: float = 1.0
-    fold_dir: str = ""
+    dataset_name: str = ""
 
 
 @dataclass

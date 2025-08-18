@@ -38,7 +38,7 @@ RENDERERS_DICT: dict[str, RendererConfig] = {
     "PolynomialDegreeRenderer": RendererConfig(PolynomialDegreeRenderer, 1),
     "PolynomialRenderer": RendererConfig(PolynomialRenderer, 2),
     "SplineRenderer": RendererConfig(SplineRenderer, 1),
-    "Autoencoder": RendererConfig(Autoencoder, 3),
+    "Autoencoder": RendererConfig(Autoencoder, 4),
     "None": RendererConfig(None, 0),
 }
 
