@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import scipy.stats as stats
 import torch
 import wandb
 from torch.utils.data import DataLoader
@@ -14,25 +15,43 @@ from src.experiment import Experiment
 from src.train.train_loop import train
 
 
+def get_confidence_interval(data: np.ndarray, confidence: float = 0.95) -> tuple[float, float]:
+    n = len(data)
+    mean = np.mean(data)
+    std_err = stats.sem(data)
+    ci = stats.t.interval(confidence, df=n - 1, loc=mean, scale=std_err)
+    return ci
+
+
 class BenchmarkExperiment(Experiment):
     def __init__(self, cfg: ExperimentConfig) -> None:
         super().__init__(cfg)
 
     def run(self) -> None:
         oa_fold, aa_fold = [], []
+        oa_list, aa_list = [], []
 
         data_cfg = DATA_DICT[self.cfg.dataset_name]
         self.cfg.channels = data_cfg.channels
 
         for fold in range(data_cfg.folds):
-            oacc, aacc = self._run_single_fold(data_cfg, fold)
+            oacc, aacc, oacc_list, aacc_list = self._run_single_fold(data_cfg, fold)
             oa_fold.append(oacc)
             aa_fold.append(aacc)
+            oa_list.extend(oacc_list)
+            aa_list.extend(aacc_list)
+
+        oa_low, oa_high = get_confidence_interval(oa_list)
+        aa_low, aa_high = get_confidence_interval(aa_list)
 
         wandb.log(
             {
-                "soil/oacc": np.mean(oa_fold),
-                "soil/aacc": np.mean(aa_fold),
+                "OA": np.mean(oa_fold),
+                "AA": np.mean(aa_fold),
+                "OA_int_low": oa_low,
+                "OA_int_high": oa_high,
+                "AA_int_low": aa_low,
+                "AA_int_high": aa_high,
             }
         )
         wandb.finish()
@@ -46,6 +65,9 @@ class BenchmarkExperiment(Experiment):
         oacc_sum = 0
         aacc_sum = 0
         run_num = 5
+
+        oacc_list = []
+        aacc_list = []
 
         for run_idx in range(run_num):
             model = self._setup_autoencoder() if self.ae else self._setup_bias_variance_model()
@@ -71,10 +93,12 @@ class BenchmarkExperiment(Experiment):
             oacc, aacc = predict_soil_classes(features_train, features_test, gt_train, gt_test)
             oacc_sum += oacc
             aacc_sum += aacc
+            oacc_list.append(oacc)
+            aacc_list.append(aacc)
 
         avg_oacc = oacc_sum / run_num
         avg_aacc = aacc_sum / run_num
-        return avg_oacc, avg_aacc
+        return avg_oacc, avg_aacc, oacc_list, aacc_list
 
     def _prepare_datasets(self, fold_dir: Path):
         trainset = HyperpectralPatch(fold_dir, extra=False)

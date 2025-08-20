@@ -193,9 +193,9 @@ def plot_average_reflectance(gt_img: Tensor, pred_img: Tensor, key: str) -> None
 
 
 def plot_pixelwise(gt_img: Tensor, pred_img: Tensor, size: int, key: str, idx) -> None:
-    fig, axs = plt.subplots(10, 10, figsize=(20, 25))
-    for i in range(10):
-        for j in range(10):
+    fig, axs = plt.subplots(5, 5, figsize=(20, 25))
+    for i in range(5):
+        for j in range(5):
             axs[i, j].plot(pred_img[:, i + size, j + size])
             axs[i, j].plot(gt_img[:, i + size, j + size])
             # if key == "pixelwise" and i < 3 and j < 3:

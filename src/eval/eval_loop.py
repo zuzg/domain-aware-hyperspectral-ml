@@ -123,7 +123,7 @@ class Evaluator:
             ids = [0]
             mask_nan = False
         else:
-            ids = [0, 1, 5]
+            ids = [0, 1]
             mask_nan = True
         for i in ids:
             self._plot_image_comparisons(imgs[i][i].cpu(), renders[i][i].cpu(), mask_nan, i)
@@ -144,7 +144,7 @@ class Evaluator:
     def _plot_variance_renderer(self, raw_output: Tensor, idx: int) -> None:
         if self.ae or raw_output is None:
             return
-        img_center = raw_output.shape[2] // 2
+        img_center = raw_output.shape[3] // 2
         center_slice = raw_output[..., img_center, img_center]
         renderer_type = self.cfg.variance_renderer
         if renderer_type == "BetaRenderer":

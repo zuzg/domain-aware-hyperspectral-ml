@@ -25,6 +25,7 @@ from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, BiasVarianceModel, VarianceModel
 from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
+from src.models.modeller_fixed import Modeller as ModellerF
 from src.soil_params.pred_ml import predict_soil_parameters
 
 
@@ -95,16 +96,19 @@ class Experiment:
         max_values[max_values > self.cfg.max_val] = self.cfg.max_val
         return max_values
 
-    def _setup_autoencoder(self, div: np.ndarray) -> nn.Module:
-        self.num_params = 3
+    def _setup_autoencoder(self) -> nn.Module:
+        self.num_params = 4
         variance_model = Autoencoder(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
         # bias_model = self._prepare_bias_model(div)
         return variance_model
 
-    def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
+    def _setup_bias_variance_model(self) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
-        modeller = Modeller(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        if "scale_only" in self.cfg.tags:
+            modeller = ModellerF(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        else:
+            modeller = Modeller(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
         renderer = variance_renderer.model(self.cfg.device, self.cfg.channels, self.cfg.mu_type)
         # bias_model = self._prepare_bias_model(div)
         if self.cfg.dual_mode:

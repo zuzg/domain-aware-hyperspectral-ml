@@ -94,9 +94,12 @@ def train_step(
 
 
 def validate_step(
-    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, psnr: nn.Module, mae: nn.Module, device: str
+    model: nn.Module, dataloader: DataLoader | None, criterion: nn.Module, psnr: nn.Module, mae: nn.Module, device: str
 ) -> tuple[float]:
     """Run a validation step over the valloader and compute metrics."""
+    if dataloader is None:
+        return 0, 0, 0, 0
+
     model.eval()
     running_loss = running_psnr = running_sam = running_mae = 0.0
 
@@ -125,7 +128,7 @@ def validate_step(
     return avg_loss, avg_mae, avg_psnr, avg_sam
 
 
-def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
+def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader | None, cfg: ExperimentConfig) -> nn.Module:
     criterion = nn.HuberLoss(reduction="sum")
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
@@ -140,6 +143,7 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
     min_delta = 0.0
     best_val_loss = float("inf")
     patience_counter = 0
+    best_model = model
 
     for epoch in range(cfg.epochs):
         train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
@@ -160,10 +164,11 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
         if val_loss < best_val_loss - min_delta:
             best_val_loss = val_loss
             patience_counter = 0
+            best_model = model
         else:
             patience_counter += 1
-            if patience_counter >= patience:
+            if val_loss > 0 and patience_counter >= patience:
                 print(f"Early stopping triggered at epoch {epoch + 1}")
                 break
 
-    return model
+    return best_model
