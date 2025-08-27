@@ -15,7 +15,6 @@ class HyperviewDataset(Dataset):
         self,
         directory: str,
         ids: np.ndarray,
-        size: int,
         max_val: int,
         mean: float,
         std: float,

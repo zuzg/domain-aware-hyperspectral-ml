@@ -31,9 +31,7 @@ class Prediction:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
-        dataset = HyperviewDataset(
-            TEST_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH
-        )
+        dataset = HyperviewDataset(TEST_PATH, TEST_IDS, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH)
         preds, avg_refls = prepare_datasets(dataset, modeller, self.cfg.k, self.cfg.channels, 5, 1, self.cfg.device)
         preds_agg = aggregate_features(preds)
         indices = compute_indices_hsi(TEST_PATH)

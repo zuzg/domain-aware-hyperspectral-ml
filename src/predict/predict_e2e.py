@@ -66,9 +66,7 @@ class Prediction:
         with open(MAX_PATH, "rb") as f:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
-        dataset = HyperviewDataset(
-            TEST_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH
-        )
+        dataset = HyperviewDataset(TEST_PATH, TEST_IDS, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH)
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
         single_model = False

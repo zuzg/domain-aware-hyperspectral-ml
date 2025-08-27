@@ -70,15 +70,9 @@ class Experiment:
         rng = np.random.default_rng(12345)
         splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
         return (
-            HyperviewDataset(
-                TRAIN_PATH, splits[0], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
-            ),
-            HyperviewDataset(
-                TRAIN_PATH, splits[1], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
-            ),
-            HyperviewDataset(
-                TRAIN_PATH, splits[2], self.cfg.img_size, self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH
-            ),
+            HyperviewDataset(TRAIN_PATH, splits[0], self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH),
+            HyperviewDataset(TRAIN_PATH, splits[1], self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH),
+            HyperviewDataset(TRAIN_PATH, splits[2], self.cfg.max_val, 0, div, mask=True, bias_path=MEAN_PATH),
         )
 
     def prepare_dataloaders(self, trainset: Dataset, valset: Dataset, testset: Dataset) -> tuple[DataLoader]:
