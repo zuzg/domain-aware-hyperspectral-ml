@@ -1,10 +1,14 @@
 from src.benchmark.experiment import BenchmarkExperiment
+from src.benchmark.experiment_small_data import SmallDataExperiment
 from src.options import parse_args
 
 
 def main() -> None:
     cfg = parse_args()
-    experiment = BenchmarkExperiment(cfg=cfg)
+    if "SMALL_DATA" in cfg.tags:
+        SmallDataExperiment(cfg=cfg)
+    else:
+        experiment = BenchmarkExperiment(cfg=cfg)
     experiment.run()
 
 

@@ -1,6 +1,6 @@
 # data
-img_size: 0
-channels: 0
+img_size: 100
+channels: 150
 max_val: 6000
 
 # model
@@ -8,26 +8,25 @@ dual_mode: false
 bias_renderer: "Mean"
 variance_renderer: "GaussianSkewRenderer" # or Autoencoder
 mu_type: "unconstrained"
-k: 10
+k: 5
 
 # training
 batch_size: 8
-epochs: 50
-lr: 0.0001
+epochs: 20
+lr: 0.001
 device: "cuda"
 
 # wandb
 wandb: true
 tags:
-  - "benchmark"
+  - "hyperview"
   # - "scale_only" pass this for ablation
 
 # misc
 save_model: true
 predict_soil: true
-dataset_name: "PU" # or SV or IP
 
 # paths
-modeller_path: ""
-predictor_path: ""
-submission_path: ""
+modeller_path: "output/models/hyperview.pth"
+predictor_path: "output/models/hyperview.pickle"
+submission_path: "output/submissions/hyperview.csv"

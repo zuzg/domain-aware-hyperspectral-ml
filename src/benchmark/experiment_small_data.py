@@ -13,6 +13,7 @@ from src.benchmark.consts import SCENE_DICT, PU_CLASSES
 from src.benchmark.pred_ml import predict_soil_classes
 from src.benchmark.utils import get_confidence_interval
 from src.config import ExperimentConfig
+from src.consts import VIZ_PATH
 from src.data.dataset import HyperspectralScene
 from src.eval.eval_loop import Evaluator
 from src.experiment import Experiment
@@ -52,13 +53,14 @@ def plot_tsne(features: np.ndarray, gt_labels: np.ndarray) -> None:
     norm = mpl.colors.BoundaryNorm(boundaries=np.arange(-0.5, len(PU_CLASSES), 1), ncolors=len(PU_CLASSES))
     cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=np.arange(len(PU_CLASSES)), ax=axes)
     cbar.ax.set_yticklabels(PU_CLASSES)
-    plt.savefig("tsne.pdf")
+    plt.savefig(VIZ_PATH / "tsne.pdf")
     plt.show()
 
 
 class SmallDataExperiment(Experiment):
     def __init__(self, cfg: ExperimentConfig) -> None:
         super().__init__(cfg)
+        self._init_dirs()
 
     def run(self) -> None:
         repeat = 10
@@ -69,6 +71,7 @@ class SmallDataExperiment(Experiment):
         fulloader = DataLoader(dataset, batch_size=self.cfg.batch_size, shuffle=True)
         n = len(dataset)
         raw = False
+        tsne = False
 
         model = self._setup_autoencoder() if self.ae else self._setup_bias_variance_model()
         if not raw:
@@ -108,8 +111,8 @@ class SmallDataExperiment(Experiment):
                 oacc, aacc, preds = predict_soil_classes(features_train, features_test, gt_train, gt_test, False)
                 s_oa.append(oacc)
                 s_aa.append(aacc)
-
-            plot_tsne(features_test, gt_test)
+            if tsne:
+                plot_tsne(features_test, gt_test)
 
             oa_low, oa_high = get_confidence_interval(s_oa)
             aa_low, aa_high = get_confidence_interval(s_aa)
@@ -147,7 +150,7 @@ class SmallDataExperiment(Experiment):
             DataLoader(testset, batch_size=self.cfg.batch_size, shuffle=False),
         )
 
-    def extract_features(self, modeller, dataloader):
+    def extract_features(self, modeller: Modeller, dataloader: DataLoader) -> np.ndarray:
         device = self.cfg.device
         features = []
 
@@ -156,5 +159,4 @@ class SmallDataExperiment(Experiment):
                 img = img.to(device)
                 ft = modeller(img)
                 features.append(ft.cpu().numpy())
-
         return np.concatenate(features, axis=0)

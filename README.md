@@ -3,10 +3,10 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 ![Anaconda](https://img.shields.io/badge/Anaconda-%2344A833.svg?logo=anaconda&logoColor=white)
 
-# Domain-Aware Machine Learning Architectures for Hyperspectral Remote Sensing
+# Physics-Informed Spectral Modeling for Hyperspectral Imaging
 
-This repository contains the implementation code for the thesis:  
-**"Domain-Aware Machine Learning Architectures for Hyperspectral Remote Sensing"**.
+This repository contains the implementation code for the paper:  
+**"Physics-Informed Spectral Modeling for Hyperspectral Imaging"**.
 
 The project aims to design and evaluate machine learning models that incorporate domain-specific knowledge for improved analysis of hyperspectral data. This includes benchmarks, custom models, and tools for prediction and evaluation.
 
@@ -42,11 +42,33 @@ The project aims to design and evaluate machine learning models that incorporate
 conda env create -f env.yml
 conda activate hyperview-env
 ```
+### 2. Data
+* Pavia University / Salinas Valley / Indian Pines **disjoint patches**: [paper](https://arxiv.org/pdf/1811.03707), [download link](https://tinyurl.com/ieee-grsl)
+* Pavia University / Salinas Valley / Indian Pines **full scenes**: [website](https://www.ehu.eus/ccwintco/index.php/Hyperspectral_Remote_Sensing_Scenes)
+* HYPERVIEW 1: [paper](https://ieeexplore.ieee.org/document/9897443), [website](https://platform.ai4eo.eu/seeing-beyond-the-visible-permanent/data)
+* HYPERVIEW 2: [website](https://www.eotdl.com/datasets/HYPERVIEW2)
 
-### 2. Notebooks
 
-### 3. Experiments
+## 🧪 Experiments
+### 1. Classification on Pavia University / Salinas Valley / Indian Pines
 
+Spatially disjoint folds:
 ```bash
-python src/entrypoint.py --config configs/benchmark.yaml
+python src/benchmark/entrypoint.py --config configs/benchmark.yaml
 ```
+
+Small data experiment:
+```bash
+python src/benchmark/entrypoint.py --config configs/small_data.yaml
+```
+
+Change between datasets and models in config files.
+
+### 2. Regression on HYPERVIEW
+For HYPERVIEW 2 see branch hyperview2. For HYPERVIEW 1 run:
+```bash
+python src/entrypoint.py --config configs/hyperview.yaml
+```
+
+### 3. Notebooks
+See `grsl_viz.ipynb` for visualization code.

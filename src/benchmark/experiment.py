@@ -5,7 +5,7 @@ import numpy as np
 import optuna
 import torch
 import wandb
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from src.benchmark.consts import DATA_DICT, DatasetConfig
 from src.benchmark.pred_ml import predict_soil_classes_background
@@ -14,6 +14,7 @@ from src.config import ExperimentConfig
 from src.data.dataset import HyperpectralPatch
 from src.eval.eval_loop import Evaluator
 from src.experiment import Experiment
+from src.models.modeller import Modeller
 from src.train.train_loop import train, train_hpo
 
 
@@ -104,7 +105,7 @@ class BenchmarkExperiment(Experiment):
         avg_aacc = aacc_sum / run_num
         return avg_oacc, avg_aacc, oacc_list, aacc_list
 
-    def _prepare_datasets(self, fold_dir: Path):
+    def _prepare_datasets(self, fold_dir: Path) -> tuple[Dataset]:
         trainset = HyperpectralPatch(fold_dir, extra=False)
         predset = HyperpectralPatch(fold_dir)
         testset = HyperpectralPatch(
@@ -118,7 +119,7 @@ class BenchmarkExperiment(Experiment):
         )
         return trainset, predset, testset
 
-    def _prepare_dataloaders(self, trainset, predset, testset):
+    def _prepare_dataloaders(self, trainset: Dataset, predset: Dataset, testset: Dataset) -> tuple[DataLoader]:
         batch_size = self.cfg.batch_size
         trainloader = DataLoader(trainset, batch_size, shuffle=True)
         predloader = DataLoader(predset, batch_size, shuffle=False)
@@ -126,16 +127,14 @@ class BenchmarkExperiment(Experiment):
         testloader = DataLoader(testset, batch_size=1, shuffle=False)
         return trainloader, predloader, valloader, testloader
 
-    def _extract_features(self, modeller, dataloader):
+    def _extract_features(self, modeller: Modeller, dataloader: DataLoader) -> np.ndarray:
         device = self.cfg.device
         features = []
-
         with torch.no_grad():
             for img in dataloader:
                 img = img.to(device)
                 ft = modeller(img)
                 features.append(ft.cpu().numpy())
-
         return np.concatenate(features, axis=0)
 
     def objective(self, trial: optuna.Trial) -> float:

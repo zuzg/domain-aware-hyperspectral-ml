@@ -1,29 +1,31 @@
 # data
-img_size: 100
-channels: 150
+img_size: 0
+channels: 0
 max_val: 6000
 
 # model
 dual_mode: false
 bias_renderer: "Mean"
-variance_renderer: "GaussianSkewRenderer"
+variance_renderer: "GaussianSkewRenderer" # or Autoencoder
 mu_type: "unconstrained"
-k: 5
+k: 10
 
 # training
-batch_size: 16
-epochs: 20
-lr: 0.001
+batch_size: 512
+epochs: 50
+lr: 0.0001
 device: "cuda"
 
 # wandb
 wandb: true
 tags:
-  - ""
+  - "SMALL_DATA"
+  # - "scale_only" pass this for ablation
 
 # misc
-save_model: false
+save_model: true
 predict_soil: true
+dataset_name: "PU" # or SV or IP
 
 # paths
 modeller_path: ""

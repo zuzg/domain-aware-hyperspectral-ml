@@ -45,6 +45,7 @@ class Experiment:
     def __init__(self, cfg: ExperimentConfig) -> None:
         self.cfg = cfg
         self.ae = self.cfg.variance_renderer == "Autoencoder"
+        self._init_dirs()
         if self.cfg.wandb:
             self.name = self._set_experiment_name()
             self._initialize_wandb()
@@ -138,7 +139,6 @@ class Experiment:
         VIZ_PATH.mkdir(parents=True, exist_ok=True)
 
     def run(self) -> None:
-        self._init_dirs()
         max_values = self._load_max_values()
         trainset, valset, testset = self.prepare_datasets(max_values)
         if not self.cfg.save_model:
