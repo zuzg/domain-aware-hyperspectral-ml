@@ -137,7 +137,7 @@ class Experiment:
                 param.requires_grad = False
         return bias_model
 
-    def _init_dirs() -> None:
+    def _init_dirs(self) -> None:
         OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
         ARCHITECTURES_PATH.mkdir(parents=True, exist_ok=True)
         SUBMISSION_PATH.mkdir(parents=True, exist_ok=True)
