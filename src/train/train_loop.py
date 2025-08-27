@@ -172,3 +172,63 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader | Non
                 break
 
     return best_model
+
+
+def train_hpo(
+    model: nn.Module,
+    trainloader: DataLoader,
+    valloader: DataLoader | None,
+    cfg,
+    optimizer_name: str,
+    lr: float,
+) -> float:
+    """Train and return best validation loss (for HPO)."""
+
+    criterion = nn.HuberLoss(reduction="sum")
+
+    if optimizer_name == "AdamW":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    elif optimizer_name == "Adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    elif optimizer_name == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+    else:
+        raise ValueError(f"Unknown optimizer: {optimizer_name}")
+
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
+    psnr = PeakSignalNoiseRatio().to(cfg.device)
+    mae = MeanAbsoluteError().to(cfg.device)
+
+    patience = 5
+    min_delta = 0.0
+    best_val_loss = float("inf")
+    patience_counter = 0
+
+    for epoch in range(cfg.epochs):
+        train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
+        val_loss, val_mae, val_psnr, val_sam = validate_step(model, valloader, criterion, psnr, mae, cfg.device)
+
+        if cfg.wandb:
+            wandb.log(
+                {
+                    "metrics/train/Huber": train_loss,
+                    "metrics/val/Huber": val_loss,
+                    "metrics/val/PSNR": val_psnr,
+                    "metrics/val/SAM": val_sam,
+                    "metrics/val/MAE": val_mae,
+                }
+            )
+
+        scheduler.step()
+
+        if val_loss < best_val_loss - min_delta:
+            best_val_loss = val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if val_loss > 0 and patience_counter >= patience:
+                print(f"Early stopping at epoch {epoch + 1}")
+                break
+
+    return best_val_loss

@@ -35,12 +35,12 @@ class Decoder(nn.Module):
 
 
 class Autoencoder(nn.Module):
-    def __init__(self, channels: int, k: int, num_params: int, mlp: bool = True):
+    def __init__(self, channels: int, k: int, num_params: int, mlp: bool = False):
         super().__init__()
         self.k = k
         self.num_params = num_params
         self.encoder = Modeller(channels, k, num_params)
-        self.decoder = MLPBasedRenderer(channels, k * num_params) if mlp else Decoder(channels, k * num_params)
+        self.decoder = MLPBasedRenderer(channels, k * num_params) if mlp else Decoder(channels, k, num_params)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.encoder(x)

@@ -51,7 +51,7 @@ class Experiment:
 
     def _set_experiment_name(self) -> str:
         if self.ae:
-            return f"Autoencoder_latent={3*self.cfg.k:.0f}"
+            return f"Autoencoder_latent={4*self.cfg.k:.0f}"
         if self.cfg.dual_mode:
             pre = "[DUAL]"
         else:
@@ -159,7 +159,7 @@ class Experiment:
 
         else:
             self.trainloader, self.valloader, self.testloader = self.prepare_dataloaders(trainset, valset, testset)
-            model = self._setup_autoencoder(max_values) if self.ae else self._setup_bias_variance_model(max_values)
+            model = self._setup_autoencoder() if self.ae else self._setup_bias_variance_model()
             if self.cfg.wandb:
                 modeller_summary = summary(
                     model,
