@@ -2,9 +2,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from scipy.io import loadmat
 from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+from src.benchmark.consts import SceneConfig
 
 
 class HyperviewDataset(Dataset):
@@ -59,21 +62,40 @@ class HyperviewDataset(Dataset):
 
 
 class HyperspectralScene(Dataset):
-    def __init__(self, img: np.ndarray, mean: float, std: float) -> None:
+    def __init__(self, scene_cfg: SceneConfig) -> None:
         super().__init__()
-        self.img = self.prepare_arr(img)
-        self.transform = transforms.Normalize(mean, std)
+        self.img = self.load_scene(scene_cfg.img_path, scene_cfg.img_key)
+        self.pixels = self.prepare_arr(self.img)
+        self.gt = self.load_scene(scene_cfg.gt_path, scene_cfg.gt_key)
+        self.gt_flat = torch.from_numpy(self.gt.flatten())
+
+        # filter background (class id = 0)
+        mask = self.gt_flat != 0
+        self.pixels = self.pixels[mask]
+        self.gt_flat = self.gt_flat[mask]
+
+        self.mean, self.std = self.get_stats(self.pixels)
+        self.transform = transforms.Normalize(self.mean, self.std)
 
     def __len__(self) -> int:
-        return len(self.img)
+        return len(self.pixels)
 
-    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
-        image = self.transform(self.img)
-        return image
+    def __getitem__(self, index: int) -> Tensor:
+        pixel = self.pixels[index].unsqueeze(1).unsqueeze(2)
+        pixel = self.transform(pixel)
+        return pixel
+
+    def load_scene(self, path: Path, key: str) -> np.ndarray:
+        img = loadmat(path)[key]
+        return img
 
     def prepare_arr(self, img: np.ndarray) -> Tensor:
-        img_r = img.transpose(2, 0, 1)
-        return torch.from_numpy(img_r.astype(np.float32))
+        return torch.from_numpy(img.astype(np.float32)).flatten(end_dim=1)
+
+    def get_stats(self, img: Tensor) -> tuple[Tensor, Tensor]:
+        mean = img.mean(dim=0)
+        std = img.std(dim=0)
+        return mean, std
 
 
 class HyperpectralPatch(Dataset):

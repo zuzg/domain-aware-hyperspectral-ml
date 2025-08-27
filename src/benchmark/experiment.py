@@ -1,26 +1,20 @@
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import scipy.stats as stats
+import optuna
 import torch
 import wandb
 from torch.utils.data import DataLoader
 
 from src.benchmark.consts import DATA_DICT, DatasetConfig
-from src.benchmark.pred_ml import predict_soil_classes
+from src.benchmark.pred_ml import predict_soil_classes_background
+from src.benchmark.utils import get_confidence_interval
 from src.config import ExperimentConfig
 from src.data.dataset import HyperpectralPatch
 from src.eval.eval_loop import Evaluator
 from src.experiment import Experiment
-from src.train.train_loop import train
-
-
-def get_confidence_interval(data: np.ndarray, confidence: float = 0.95) -> tuple[float, float]:
-    n = len(data)
-    mean = np.mean(data)
-    std_err = stats.sem(data)
-    ci = stats.t.interval(confidence, df=n - 1, loc=mean, scale=std_err)
-    return ci
+from src.train.train_loop import train, train_hpo
 
 
 class BenchmarkExperiment(Experiment):
@@ -62,6 +56,16 @@ class BenchmarkExperiment(Experiment):
         trainset, predset, testset = self._prepare_datasets(fold_dir)
         trainloader, predloader, valloader, testloader = self._prepare_dataloaders(trainset, predset, testset)
 
+        # study = optuna.create_study(direction="minimize")
+        # study.optimize(self.objective, n_trials=30)  # number of trials
+
+        # print("Best trial:")
+        # trial = study.best_trial
+        # print(f"  Loss: {trial.value}")
+        # print("  Params: ")
+        # for k, v in trial.params.items():
+        #     print(f"    {k}: {v}")
+
         oacc_sum = 0
         aacc_sum = 0
         run_num = 5
@@ -77,7 +81,7 @@ class BenchmarkExperiment(Experiment):
                 print("Evaluating")
                 bias = trainset.channel_mean / trainset.channel_max
                 bias = bias.unsqueeze(1).unsqueeze(1).numpy()
-                Evaluator(model, self.cfg, self.ae, bias).evaluate(valloader)
+                # Evaluator(model, self.cfg, self.ae, bias).evaluate(valloader)
 
             modeller = model.encoder if self.ae else model.modeller
 
@@ -90,7 +94,7 @@ class BenchmarkExperiment(Experiment):
             gt_train = np.array(predset.gt).reshape(-1)
             gt_test = np.array(testset.gt)
 
-            oacc, aacc = predict_soil_classes(features_train, features_test, gt_train, gt_test)
+            oacc, aacc = predict_soil_classes_background(features_train, features_test, gt_train, gt_test)
             oacc_sum += oacc
             aacc_sum += aacc
             oacc_list.append(oacc)
@@ -133,3 +137,10 @@ class BenchmarkExperiment(Experiment):
                 features.append(ft.cpu().numpy())
 
         return np.concatenate(features, axis=0)
+
+    def objective(self, trial: optuna.Trial) -> float:
+        lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+        optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "AdamW", "SGD"])
+        model = self._setup_autoencoder()
+        val_loss = train_hpo(model, self.trainloader, self.trainloader, self.cfg, optimizer_name, lr)
+        return val_loss
