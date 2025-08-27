@@ -1,7 +1,7 @@
 # data
 img_size: 0
 channels: 0
-max_val: 6000
+max_val: 0
 
 # model
 dual_mode: false

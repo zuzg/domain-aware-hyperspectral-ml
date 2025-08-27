@@ -5,8 +5,7 @@
 
 # Physics-Informed Spectral Modeling for Hyperspectral Imaging
 
-This repository contains the implementation code for the paper:  
-**"Physics-Informed Spectral Modeling for Hyperspectral Imaging"**.
+This repository contains the implementation code for the paper: **"Physics-Informed Spectral Modeling for Hyperspectral Imaging"**.
 
 The project aims to design and evaluate machine learning models that incorporate domain-specific knowledge for improved analysis of hyperspectral data. This includes benchmarks, custom models, and tools for prediction and evaluation.
 
@@ -65,10 +64,10 @@ python src/benchmark/entrypoint.py --config configs/small_data.yaml
 Change between datasets and models in config files.
 
 ### 2. Regression on HYPERVIEW
-For HYPERVIEW 2 see branch hyperview2. For HYPERVIEW 1 run:
+For HYPERVIEW 2 see the branch `hyperview2`. For HYPERVIEW 1 run:
 ```bash
 python src/entrypoint.py --config configs/hyperview.yaml
 ```
 
 ### 3. Notebooks
-See `grsl_viz.ipynb` for visualization code.
+See `notebooks/grsl_viz.ipynb` for visualization code.

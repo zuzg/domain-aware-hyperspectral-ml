@@ -1,7 +1,7 @@
 # data
 img_size: 0
 channels: 0
-max_val: 6000
+max_val: 0
 
 # model
 dual_mode: false
@@ -12,7 +12,7 @@ k: 10
 
 # training
 batch_size: 512
-epochs: 50
+epochs: 5
 lr: 0.0001
 device: "cuda"
 
@@ -28,6 +28,6 @@ predict_soil: true
 dataset_name: "PU" # or SV or IP
 
 # paths
-modeller_path: ""
+modeller_path: "output/models/small_data.pth"
 predictor_path: ""
 submission_path: ""

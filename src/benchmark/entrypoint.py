@@ -6,7 +6,7 @@ from src.options import parse_args
 def main() -> None:
     cfg = parse_args()
     if "SMALL_DATA" in cfg.tags:
-        SmallDataExperiment(cfg=cfg)
+        experiment = SmallDataExperiment(cfg=cfg)
     else:
         experiment = BenchmarkExperiment(cfg=cfg)
     experiment.run()
