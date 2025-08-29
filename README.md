@@ -4,6 +4,9 @@
 ![Anaconda](https://img.shields.io/badge/Anaconda-%2344A833.svg?logo=anaconda&logoColor=white)
 
 # Physics-Informed Spectral Modeling for Hyperspectral Imaging
+<p align="center">
+<img width="600" height="400" alt="phism" src="https://github.com/user-attachments/assets/403ba79b-d159-4483-90eb-84c124d44025" />
+</p>
 
 This repository contains the implementation code for the paper: **"Physics-Informed Spectral Modeling for Hyperspectral Imaging"**.
 
