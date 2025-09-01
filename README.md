@@ -1,7 +1,8 @@
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![pytorch](https://img.shields.io/badge/PyTorch-2.1.2-EE4C2C.svg?style=flat&logo=pytorch)](https://pytorch.org)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-![Anaconda](https://img.shields.io/badge/Anaconda-%2344A833.svg?logo=anaconda&logoColor=white)
+[![arXiv](https://img.shields.io/badge/arXiv-2508.21618-00ff00.svg)](https://arxiv.org/abs/2508.21618)
+
 
 # Physics-Informed Spectral Modeling for Hyperspectral Imaging
 <p align="center">
