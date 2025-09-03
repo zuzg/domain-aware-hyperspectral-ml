@@ -12,7 +12,11 @@ class GaussianAsymmetricRenderer(BaseRenderer):
 
     def __call__(self, batch: Tensor) -> Tensor:
         batch_size, k, params, h, w = batch.shape
-        self.bands = torch.arange(1, self.channels + 1, device=self.device).float().repeat(k, h, w, 1)
+        self.bands = (
+            torch.arange(1, self.channels + 1, device=self.device)
+            .float()
+            .repeat(k, h, w, 1)
+        )
         rendered_list = []
 
         for idx in range(batch_size):
@@ -20,16 +24,20 @@ class GaussianAsymmetricRenderer(BaseRenderer):
                 batch[idx, :, 0, ...],  # mu
                 batch[idx, :, 1, ...],  # sigma_left
                 batch[idx, :, 2, ...],  # sigma_right
-                batch[idx, :, 3, ...]   # scale
+                batch[idx, :, 3, ...],  # scale
             )
             pixel_dist = torch.sum(dists, dim=0)
-            rendered_frame = pixel_dist.permute(2, 0, 1) + batch[idx, 0, 4, ...]  # shift
+            rendered_frame = (
+                pixel_dist.permute(2, 0, 1) + batch[idx, 0, 4, ...]
+            )  # shift
             rendered_list.append(rendered_frame)
 
         rendered = torch.stack(rendered_list)
         return rendered.to(self.device)
 
-    def generate_distribution(self, mu: Tensor, sigma_left: Tensor, sigma_right: Tensor, scale: Tensor) -> Tensor:
+    def generate_distribution(
+        self, mu: Tensor, sigma_left: Tensor, sigma_right: Tensor, scale: Tensor
+    ) -> Tensor:
         eps = 1e-4
         sigma_left = torch.add(sigma_left, eps)
         sigma_right = torch.add(sigma_right, eps)
@@ -40,8 +48,12 @@ class GaussianAsymmetricRenderer(BaseRenderer):
         right_mask = self.bands > mu_transformed
 
         # Create separate distributions for the left and right sides
-        normal_dist_left = Normal(mu_transformed, self.channels * sigma_left.unsqueeze(-1))
-        normal_dist_right = Normal(mu_transformed, self.channels * sigma_right.unsqueeze(-1))
+        normal_dist_left = Normal(
+            mu_transformed, self.channels * sigma_left.unsqueeze(-1)
+        )
+        normal_dist_right = Normal(
+            mu_transformed, self.channels * sigma_right.unsqueeze(-1)
+        )
 
         # Compute probabilities for each side
         prob_left = torch.exp(normal_dist_left.log_prob(self.bands)) * left_mask

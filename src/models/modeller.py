@@ -15,7 +15,6 @@ def calculate_mu(mu_group: Tensor) -> Tensor:
 class Modeller(nn.Module):
     def __init__(
         self,
-        img_size: int,
         channels: int,
         k: int,
         num_params: int,
@@ -23,7 +22,6 @@ class Modeller(nn.Module):
     ):
         super().__init__()
         self.k = k
-        self.size = img_size
         self.num_params = num_params
         self.multi_mu = multi_mu
         if multi_mu:

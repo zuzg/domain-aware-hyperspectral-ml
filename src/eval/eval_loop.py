@@ -34,7 +34,7 @@ class Evaluator:
 
     def _initialize_model_components(self) -> tuple[nn.Module | None]:
         if self.ae:
-            return self.model, None, self.model.bias
+            return self.model, None, None
         return self.model.modeller, self.model.renderer, None
 
     def evaluate(self, testloader: DataLoader) -> None:

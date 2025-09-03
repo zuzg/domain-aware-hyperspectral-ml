@@ -10,11 +10,18 @@ class PolynomialRenderer(BaseRenderer):
 
     def __call__(self, batch: Tensor) -> Tensor:
         batch_size, k, params, h, w = batch.shape
-        self.bands = torch.arange(1, self.channels + 1).float().repeat(k, h, w, 1).to(self.device)
+        self.bands = (
+            torch.arange(1, self.channels + 1)
+            .float()
+            .repeat(k, h, w, 1)
+            .to(self.device)
+        )
         rendered_list = []
 
         for idx in range(batch_size):
-            polynoms = self.generate_polynomial(batch[idx, :, 0, ...], batch[idx, :, 1, ...])
+            polynoms = self.generate_polynomial(
+                batch[idx, :, 0, ...], batch[idx, :, 1, ...]
+            )
             pixel_dist = torch.sum(polynoms, dim=0)
             rendered_list.append(pixel_dist.permute(2, 0, 1))
 

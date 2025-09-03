@@ -33,9 +33,13 @@ def parse_args() -> PredictionConfig:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default="data/hyperview/test_data")
     parser.add_argument(
-        "--modeller_path", type=str, default="output/modeller_var=GaussianRenderer_bias=Mean_k=5_20_k=5_full_soil.pth"
+        "--modeller_path",
+        type=str,
+        default="output/modeller_var=GaussianRenderer_bias=Mean_k=5_20_k=5_full_soil.pth",
     )
-    parser.add_argument("--regressor_path", type=str, default="output/regressor_full_single.pth")
+    parser.add_argument(
+        "--regressor_path", type=str, default="output/regressor_full_single.pth"
+    )
     parser.add_argument("--single_model", type=bool, default=True)
     parser.add_argument("--img_size", type=int, default=100)
     parser.add_argument("--channels", type=int, default=150)
@@ -69,7 +73,8 @@ def compute_masks(img: Tensor, mask: Tensor, gt_div_tensor: Tensor) -> tuple[Ten
 
 
 def predict_params(
-    model: nn.Module, testloader: DataLoader, gt_div: np.ndarray, device: str) -> np.ndarray:
+    model: nn.Module, testloader: DataLoader, gt_div: np.ndarray, device: str
+) -> np.ndarray:
     model.eval()
     gt_div_tensor = torch.tensor(gt_div, device=device).reshape(1, len(gt_div), 1, 1)
     preds = []
@@ -79,7 +84,9 @@ def predict_params(
         for img in testloader:
             img = img.to(device)
             mask = img[:, 0] == 0
-            div = (img[:, 0] != 0).sum().item()  # Count of non-zero elements in channel 0
+            div = (
+                (img[:, 0] != 0).sum().item()
+            )  # Count of non-zero elements in channel 0
             pred = model(img)
             masked_pred = compute_masks(pred, mask, gt_div_tensor)
             masked_pred_mean = masked_pred.sum(dim=(0, 2, 3)) / div
@@ -103,8 +110,18 @@ class Prediction:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
 
-        dataset = HyperviewDataset(self.cfg.dataset_path, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True)
-        features = prepare_datasets(dataset, modeller, self.cfg.k, GT_DIM, self.cfg.batch_size, self.cfg.device)
+        dataset = HyperviewDataset(
+            self.cfg.dataset_path,
+            TEST_IDS,
+            self.cfg.img_size,
+            self.cfg.max_val,
+            0,
+            maxx,
+            mask=True,
+        )
+        features = prepare_datasets(
+            dataset, modeller, self.cfg.k, GT_DIM, self.cfg.batch_size, self.cfg.device
+        )
         pred_dataset = PredDataset(features)
         dataloader = DataLoader(pred_dataset, batch_size=1, shuffle=False)
 
@@ -117,7 +134,12 @@ class Prediction:
         else:
             submission = pd.DataFrame(columns=GT_NAMES)
             base_path = Path("output")
-            models = ["regressor_full_325.0.pth", "regressor_full_625.0.pth", "regressor_full_400.0.pth", "regressor_full_7.8.pth"]
+            models = [
+                "regressor_full_325.0.pth",
+                "regressor_full_625.0.pth",
+                "regressor_full_400.0.pth",
+                "regressor_full_7.8.pth",
+            ]
             for gt_name, gt_max, model_path in zip(GT_NAMES, GT_MAX, models):
                 regressor = MultiRegressionCNN(20, output_channels=1)
                 regressor.load_state_dict(torch.load(base_path / model_path))
@@ -125,7 +147,9 @@ class Prediction:
                 preds = predict_params(regressor, dataloader, [gt_max], self.cfg.device)
                 submission[gt_name] = preds
 
-        submission.to_csv("output/submission_single_NEW_small_16.csv", index_label="sample_index")
+        submission.to_csv(
+            "output/submission_single_NEW_small_16.csv", index_label="sample_index"
+        )
 
 
 def main() -> None:

@@ -57,7 +57,9 @@ def pretrain(
     return bias_model
 
 
-def compute_loss(criterion: nn.Module, pred: Tensor, target: Tensor, mask: Tensor) -> nn.Module:
+def compute_loss(
+    criterion: nn.Module, pred: Tensor, target: Tensor, mask: Tensor
+) -> nn.Module:
     """Compute masked loss normalized by the number of unmasked elements."""
     masked_pred = pred[mask]
     masked_target = target[mask]
@@ -94,7 +96,12 @@ def train_step(
 
 
 def validate_step(
-    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, psnr: nn.Module, mae: nn.Module, device: str
+    model: nn.Module,
+    dataloader: DataLoader,
+    criterion: nn.Module,
+    psnr: nn.Module,
+    mae: nn.Module,
+    device: str,
 ) -> tuple[float]:
     """Run a validation step over the valloader and compute metrics."""
     model.eval()
@@ -125,7 +132,12 @@ def validate_step(
     return avg_loss, avg_mae, avg_psnr, avg_sam
 
 
-def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
+def train(
+    model: nn.Module,
+    trainloader: DataLoader,
+    valloader: DataLoader,
+    cfg: ExperimentConfig,
+) -> nn.Module:
     criterion = nn.HuberLoss(reduction="sum")
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
@@ -142,8 +154,12 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
     patience_counter = 0
 
     for epoch in range(cfg.epochs):
-        train_loss = train_step(model, trainloader, criterion, optimizer, cfg.device, epoch)
-        val_loss, val_mae, val_psnr, val_sam = validate_step(model, valloader, criterion, psnr, mae, cfg.device)
+        train_loss = train_step(
+            model, trainloader, criterion, optimizer, cfg.device, epoch
+        )
+        val_loss, val_mae, val_psnr, val_sam = validate_step(
+            model, valloader, criterion, psnr, mae, cfg.device
+        )
         if cfg.wandb:
             wandb.log(
                 {

@@ -26,7 +26,17 @@ Data files should be copied to `data/HYPERVIEW2` directory with following struct
 └──     └── train_gt.csv
 ```
 
-### 2. Experiments
+### 2. Inference
+Run the following command. This script uses weights saved in `output\models`. Note that `features_putential.pth` is used to generate features which are then inputed to `predictor_putential.pickle`. The are five separate regressor models (random forest) for B, Cu, Zn, Fe, and S + Mn.
+
+```bash
+python src/predict/predict_ml.py --model_config configs/hyperview2.yaml
+```
+
+The submission file will be saved in `output/submissions` directory.
+
+
+### 3. Training
 Run the following command. Full training should take around 10 minutes using cpu.
 
 ```bash

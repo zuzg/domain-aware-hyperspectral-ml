@@ -14,7 +14,9 @@ def permute_spatial_pixels(x: np.ndarray) -> np.ndarray:
     return x_shuffled.reshape(n, c, h, w)
 
 
-def mix_samples(features: np.ndarray, gt: np.ndarray, alpha: float = 0.5) -> tuple[np.ndarray, np.ndarray]:
+def mix_samples(
+    features: np.ndarray, gt: np.ndarray, alpha: float = 0.5
+) -> tuple[np.ndarray, np.ndarray]:
     idx1, idx2 = np.random.choice(features.shape[0], 2, replace=False)
 
     mixed_feature = alpha * features[idx1] + (1 - alpha) * features[idx2]
@@ -24,7 +26,10 @@ def mix_samples(features: np.ndarray, gt: np.ndarray, alpha: float = 0.5) -> tup
 
 
 def mix_batch(
-    features: np.ndarray, gt: np.ndarray, num_samples: int = 100, alpha_range: tuple[float, float] = (0.2, 0.8)
+    features: np.ndarray,
+    gt: np.ndarray,
+    num_samples: int = 100,
+    alpha_range: tuple[float, float] = (0.2, 0.8),
 ) -> tuple[np.ndarray, np.ndarray]:
     mixed_features = []
     mixed_gts = []
@@ -38,7 +43,9 @@ def mix_batch(
     return np.array(mixed_features), np.array(mixed_gts)
 
 
-def balance_dataset(x: np.ndarray, y: np.ndarray, cl: float, ch: float) -> tuple[np.ndarray, np.ndarray]:
+def balance_dataset(
+    x: np.ndarray, y: np.ndarray, cl: float, ch: float
+) -> tuple[np.ndarray, np.ndarray]:
     relevance = resreg.sigmoid_relevance(y, cl=cl, ch=ch)
     x_balanced, y_balanced = resreg.smoter(x, y, relevance=relevance)
     return x_balanced, y_balanced

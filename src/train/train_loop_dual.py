@@ -12,7 +12,9 @@ from src.models.dual import DualModeAutoencoder
 from src.train.metrics import calculate_sam
 
 
-def compute_loss(criterion: nn.Module, pred: Tensor, target: Tensor, mask: Tensor) -> nn.Module:
+def compute_loss(
+    criterion: nn.Module, pred: Tensor, target: Tensor, mask: Tensor
+) -> nn.Module:
     """Compute masked loss normalized by the number of unmasked elements."""
     masked_pred = pred[mask]
     masked_target = target[mask]
@@ -44,7 +46,9 @@ def train_step(
 
             # Classical Autoencoder Mode
             original_images, reconstructed_images = model(batch, mode="classical")
-            classical_loss = compute_loss(criterion, reconstructed_images, original_images, mask)
+            classical_loss = compute_loss(
+                criterion, reconstructed_images, original_images, mask
+            )
 
             # Inverse Autoencoder Mode
             original_latents, reconstructed_latents = model(mode="inverse")
@@ -60,7 +64,11 @@ def train_step(
             step_losses_classical.append(classical_loss.item())
             step_losses_inverse.append(inverse_loss.item())
 
-    return np.mean(step_losses), np.mean(step_losses_classical), np.mean(step_losses_inverse)
+    return (
+        np.mean(step_losses),
+        np.mean(step_losses_classical),
+        np.mean(step_losses_inverse),
+    )
 
 
 def validate_step(
@@ -84,7 +92,9 @@ def validate_step(
 
             # Classical Autoencoder Mode
             original_images, reconstructed_images = model(batch, mode="classical")
-            classical_loss = compute_loss(criterion, reconstructed_images, original_images, mask)
+            classical_loss = compute_loss(
+                criterion, reconstructed_images, original_images, mask
+            )
 
             # Inverse Autoencoder Mode
             original_latents, reconstructed_latents = model(mode="inverse")
@@ -114,7 +124,12 @@ def validate_step(
     return avg_loss, avg_mse, avg_mae, avg_psnr, avg_sam
 
 
-def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg: ExperimentConfig) -> nn.Module:
+def train(
+    model: nn.Module,
+    trainloader: DataLoader,
+    valloader: DataLoader,
+    cfg: ExperimentConfig,
+) -> nn.Module:
     """Train the model with given configurations."""
     criterion = nn.HuberLoss(reduction="sum")
     criterion_dual = nn.HuberLoss()
@@ -131,10 +146,24 @@ def train(model: nn.Module, trainloader: DataLoader, valloader: DataLoader, cfg:
 
     for epoch in range(cfg.epochs):
         train_loss, train_loss_classical, train_loss_inverse = train_step(
-            model, trainloader, criterion, criterion_dual, optimizer, cfg.device, epoch, alpha=alpha
+            model,
+            trainloader,
+            criterion,
+            criterion_dual,
+            optimizer,
+            cfg.device,
+            epoch,
+            alpha=alpha,
         )
         val_loss, val_mse, val_mae, val_psnr, val_sam = validate_step(
-            model, valloader, criterion, criterion_dual, psnr, mae, cfg.device, alpha=alpha
+            model,
+            valloader,
+            criterion,
+            criterion_dual,
+            psnr,
+            mae,
+            cfg.device,
+            alpha=alpha,
         )
         if cfg.wandb:
             wandb.log(

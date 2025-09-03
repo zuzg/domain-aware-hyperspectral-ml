@@ -5,7 +5,15 @@ from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from src.config import ExperimentConfig
-from src.consts import GT_DIM, GT_MAX, GT_NAMES, MAX_PATH, MEAN_PATH, TEST_IDS, TEST_PATH
+from src.consts import (
+    GT_DIM,
+    GT_MAX,
+    GT_NAMES,
+    MAX_PATH,
+    MEAN_PATH,
+    TEST_IDS,
+    TEST_PATH,
+)
 from src.data.dataset import HyperviewDataset
 from src.models.modeller import Modeller
 from src.options import parse_args
@@ -32,7 +40,9 @@ def compute_masks(img: Tensor, mask: Tensor, gt_div_tensor: Tensor) -> tuple[Ten
     return masked_pred * gt_div_tensor
 
 
-def predict_params(model: nn.Module, testloader: DataLoader, gt_div: np.ndarray, device: str) -> np.ndarray:
+def predict_params(
+    model: nn.Module, testloader: DataLoader, gt_div: np.ndarray, device: str
+) -> np.ndarray:
     model.eval()
     gt_div_tensor = torch.tensor(gt_div, device=device).reshape(1, len(gt_div), 1, 1)
     preds = []
@@ -41,7 +51,9 @@ def predict_params(model: nn.Module, testloader: DataLoader, gt_div: np.ndarray,
         for img in testloader:
             img = img.to(device)
             mask = img[:, 0] == 0
-            div = (img[:, 0] != 0).sum().item()  # Count of non-zero elements in channel 0
+            div = (
+                (img[:, 0] != 0).sum().item()
+            )  # Count of non-zero elements in channel 0
             pred = model(img)
             masked_pred = compute_masks(pred, mask, gt_div_tensor)
             masked_pred_mean = masked_pred.sum(dim=(0, 2, 3)) / div
@@ -67,7 +79,14 @@ class Prediction:
             maxx = np.load(f)
         maxx[maxx > self.cfg.max_val] = self.cfg.max_val
         dataset = HyperviewDataset(
-            TEST_PATH, TEST_IDS, self.cfg.img_size, self.cfg.max_val, 0, maxx, mask=True, bias_path=MEAN_PATH
+            TEST_PATH,
+            TEST_IDS,
+            self.cfg.img_size,
+            self.cfg.max_val,
+            0,
+            maxx,
+            mask=True,
+            bias_path=MEAN_PATH,
         )
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 

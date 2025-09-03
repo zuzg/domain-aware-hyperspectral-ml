@@ -37,19 +37,12 @@ def apply_baseline_mask(
     return np.where(crop_mask == 0, data, 0)
 
 
-def apply_non_baseline_mask(
-    pred: np.ndarray, mask: np.ndarray, k: int, num_params: int, ae: bool
-) -> np.ndarray:
-    if ae:
-        expanded_mask = np.expand_dims(mask, axis=1)
-        crop_mask = np.repeat(expanded_mask, repeats=k * num_params, axis=1)
-    else:
+def apply_non_baseline_mask(pred: np.ndarray, mask: np.ndarray, k: int, num_params: int, ae: bool) -> np.ndarray:
+    if not ae:
         shift = pred[:, 0, num_params - 2 : num_params - 1]
-        pred[:, :, num_params - 2] = shift  # TODO drop instead of copying
-        expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
-        crop_mask = np.repeat(
-            np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2
-        )
+        pred[:, :, num_params - 2] = shift
+    expanded_mask = np.expand_dims(np.expand_dims(mask, axis=1), axis=2)
+    crop_mask = np.repeat(np.repeat(expanded_mask, repeats=k, axis=1), repeats=num_params, axis=2)
     return np.where(crop_mask == 0, pred, 0)
 
 
@@ -102,10 +95,10 @@ def prepare_datasets(
         features.shape[0] * batch_size, f_dim, features.shape[-2], features.shape[-1]
     )
     # Indices of shift_* except shift_1 (index 3)
-    drop_indices = [i * num_params + 3 for i in range(1, k)]
-    # Remove those feature channels
-    features_filtered = np.delete(sorted_features, drop_indices, axis=1)
-    return features_filtered, img_means.reshape(
+    # drop_indices = [i * num_params + 3 for i in range(1, k)]
+    # # Remove those feature channels
+    # features_filtered = np.delete(sorted_features, drop_indices, axis=1)
+    return sorted_features, img_means.reshape(
         features.shape[0] * batch_size, img_means.shape[-1]
     )
 

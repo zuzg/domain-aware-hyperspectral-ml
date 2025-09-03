@@ -14,4 +14,6 @@ class SplineRenderer(BaseRenderer):
 
     def generate_spline(self, points: Tensor) -> Tensor:
         points = points.permute(0, 2, 1, 3)
-        return nn.functional.interpolate(input=points, size=[self.channels, points.shape[-1]], mode="bicubic")
+        return nn.functional.interpolate(
+            input=points, size=[self.channels, points.shape[-1]], mode="bicubic"
+        )

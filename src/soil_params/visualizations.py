@@ -11,8 +11,18 @@ from src.consts import GT_NAMES
 
 
 def gt_to_lists(dataset: Dataset) -> tuple[list]:
-    ps, ks, mgs, phs, = [], [], [], []
-    for (img, gt) in dataset:
+    (
+        ps,
+        ks,
+        mgs,
+        phs,
+    ) = (
+        [],
+        [],
+        [],
+        [],
+    )
+    for img, gt in dataset:
         pixel = gt[:, 0, 0]
         p, k, mg, ph = pixel[0], pixel[1], pixel[2], pixel[3]
         ps.append(p)
@@ -96,10 +106,18 @@ def plot_soil_params(
                 row=row,
                 col=col,
             )
-        fig.update_xaxes(title_text="Number of samples", tickvals=x, ticktext=samples, row=row, col=col)
+        fig.update_xaxes(
+            title_text="Number of samples",
+            tickvals=x,
+            ticktext=samples,
+            row=row,
+            col=col,
+        )
         fig.update_yaxes(title_text="MSE", row=row, col=col)
 
     fig.update_layout(
-        title_text="MLP: mean and std of MSE for each predicted soil parameter", showlegend=True, hovermode="x"
+        title_text="MLP: mean and std of MSE for each predicted soil parameter",
+        showlegend=True,
+        hovermode="x",
     )
     wandb.log({"soil_params": fig})

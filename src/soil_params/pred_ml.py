@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 import optuna
 import pandas as pd
-import wandb
+import scipy.stats as stats
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import (
@@ -18,6 +18,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.utils import compute_sample_weight
 from torch.utils.data import Dataset
 
+import wandb
 from src.config import ExperimentConfig
 from src.consts import (
     GT_NAMES,
@@ -40,6 +41,15 @@ from src.soil_params.utils import MODELS_CONFIG, ModelConfig
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
+
+
+def get_confidence_interval(data: np.ndarray, confidence: float = 0.95) -> tuple[float, float]:
+    n = len(data)
+    mean = np.mean(data)
+    std_err = stats.sem(data)
+    ci = stats.t.interval(confidence, df=n - 1, loc=mean, scale=std_err)
+    return ci
 
 
 def objective(
@@ -213,8 +223,8 @@ def samples_number_experiment(
     sample_nums: list[int],
     model_config: ModelConfig,
     model_path: str,
-    n_runs: int = 1,
-    wdb: bool = False,
+    n_runs: int = 5,
+    wdb: bool = True,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     mses_mean = []
     mses_std = []
@@ -236,7 +246,7 @@ def samples_number_experiment(
             x_train_base, x_test, y_train_base, y_test = train_test_split(
                 x, y, test_size=0.2, random_state=run
             )
-            x_train, y_train = x, y  # x_train_base, y_train_base
+            x_train, y_train = x_train_base, y_train_base
             mse = predict_params(
                 x_train, x_test, y_train, y_test, model_config, model_path, save_model
             )
@@ -257,8 +267,10 @@ def samples_number_experiment(
         mses_sample_mean = mses_for_sample.mean(axis=0)
         mses_mean.append(mses_sample_mean)
         mses_std.append(mses_for_sample.std(axis=0))
+        low, high = get_confidence_interval(mses_for_sample.mean(axis=1))
 
         log.info(f"score = {1 / len(GT_NAMES) * np.sum(mses_sample_mean)}")
+        print("int", (high - low) / 2)
         if wdb:
             wandb.log(
                 {
@@ -270,6 +282,7 @@ def samples_number_experiment(
                     f"soil/{GT_NAMES[4]}": mses_sample_mean[4],
                     f"soil/{GT_NAMES[5]}": mses_sample_mean[5],
                     "soil/score": 1 / len(GT_NAMES) * np.sum(mses_sample_mean),
+                    "soil/std": (high - low) / 2,
                 }
             )
     return np.array(mses_mean), np.array(mses_std)
@@ -288,7 +301,7 @@ def predict_soil_parameters(
     num_params: int,
     cfg: ExperimentConfig,
     ae: bool,
-    aug: bool = True,
+    aug: bool = False,
 ) -> None:
     preds, avg_refls = prepare_datasets(
         dataset, model, cfg.k, cfg.channels, num_params, 4, cfg.device, ae
@@ -304,7 +317,7 @@ def predict_soil_parameters(
     # hsi = load_hsi_airborne_images(AIRBORNE_TRAIN_PATH)
     # airborne_feature(msi_means, hsi)
 
-    features = np.concatenate([preds_agg, msi_means], axis=1)
+    features = preds_agg #np.concatenate([preds_agg], axis=1)
     gt = prepare_gt(dataset.ids)
     gt = gt.values
 

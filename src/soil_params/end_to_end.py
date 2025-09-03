@@ -84,9 +84,13 @@ def predict_params(
     log = not save_model
     out_dim = 1
 
-    model = train_end_to_end(trainloader, modeller, f_dim, out_dim=out_dim, log=log, param=model_name)
+    model = train_end_to_end(
+        trainloader, modeller, f_dim, out_dim=out_dim, log=log, param=model_name
+    )
     if save_model:
-        torch.save(model.state_dict(), OUTPUT_PATH / "models" / f"e2e_model_{model_name}.pth")
+        torch.save(
+            model.state_dict(), OUTPUT_PATH / "models" / f"e2e_model_{model_name}.pth"
+        )
     model.to(device)
     model.eval()
 
@@ -130,7 +134,9 @@ def samples_number_experiment(
         for run in range(n_runs):
             print(run)
             generator = torch.Generator().manual_seed(run)
-            trainset_base, testset = random_split(dataset, [0.8, 0.2], generator=generator)
+            trainset_base, testset = random_split(
+                dataset, [0.8, 0.2], generator=generator
+            )
             # trainset = Subset(trainset_base, indices=range(sn))
 
             trainloader = DataLoader(
@@ -152,7 +158,15 @@ def samples_number_experiment(
             #     collate_fn=collate_fn_pad_full,
             # )
 
-            mse = predict_params(trainloader, testloader, modeller, f_dim, gt_div, DEVICE, model_name=param)
+            mse = predict_params(
+                trainloader,
+                testloader,
+                modeller,
+                f_dim,
+                gt_div,
+                DEVICE,
+                model_name=param,
+            )
             print(mse)
             mses_for_sample.append(mse / mse_base)
             # _ = predict_params(fullloader, fullloader, modeller, f_dim, gt_div, DEVICE, param, save_model=True)
@@ -199,18 +213,22 @@ def predict_soil_parameters(
     splits = np.split(rng.permutation(TRAIN_IDS), np.cumsum(SPLIT_RATIO))
     gt = prepare_gt(dataset.ids)
     f_dim = cfg.channels if baseline else cfg.k * num_params
-    mse_base = [MSE_BASE_B,
-    MSE_BASE_CU,
-    MSE_BASE_FE,
-    MSE_BASE_MN,
-    MSE_BASE_S,
-    MSE_BASE_ZN,]
+    mse_base = [
+        MSE_BASE_B,
+        MSE_BASE_CU,
+        MSE_BASE_FE,
+        MSE_BASE_MN,
+        MSE_BASE_S,
+        MSE_BASE_ZN,
+    ]
 
     max_samples = 1876
-    samples = [max_samples] 
+    samples = [max_samples]
 
     if single_model:
-        dataset = ImgGtDataset(TRAIN_PATH, splits[2], max_values, cfg.max_val, gt, GT_MAX, 300)
+        dataset = ImgGtDataset(
+            TRAIN_PATH, splits[2], max_values, cfg.max_val, gt, GT_MAX, 300
+        )
         samples_number_experiment(dataset, model, samples, GT_MAX, f_dim, mse_base)
 
     else:
@@ -218,10 +236,22 @@ def predict_soil_parameters(
         for i, soil_param in enumerate(GT_NAMES):
             gt_param = gt.iloc[:, i]
             dataset_param = ImgGtDataset(
-                TRAIN_PATH, splits[2], max_values, cfg.max_val, gt_param.to_frame(), [GT_MAX[i]], 300
+                TRAIN_PATH,
+                splits[2],
+                max_values,
+                cfg.max_val,
+                gt_param.to_frame(),
+                [GT_MAX[i]],
+                300,
             )
             mse, stds = samples_number_experiment(
-                dataset_param, model, samples, np.array([GT_MAX[i]]), f_dim, mse_base[i], soil_param
+                dataset_param,
+                model,
+                samples,
+                np.array([GT_MAX[i]]),
+                f_dim,
+                mse_base[i],
+                soil_param,
             )
             mses.append(mse)
         wandb.log({"soil/score": np.mean(mses), "soil/std": np.mean(stds)})

@@ -2,11 +2,11 @@ import logging
 
 import numpy as np
 import torch
-import wandb
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 from torchinfo import summary
 
+import wandb
 from src.config import ExperimentConfig
 from src.consts import (
     ARCHITECTURES_PATH,
@@ -18,7 +18,6 @@ from src.consts import (
     RENDERERS_DICT,
     SPLIT_RATIO,
     SUBMISSION_PATH,
-    TEST_IDS,
     TRAIN_IDS,
     TRAIN_PATH,
 )
@@ -29,6 +28,7 @@ from src.models.autoencoder import Autoencoder
 from src.models.bias_variance_model import BiasModel, VarianceModel
 from src.models.dual import DualModeAutoencoder
 from src.models.modeller import Modeller
+from src.models.modeller_fixed import Modeller as ModellerF
 from src.soil_params.pred_ml import predict_soil_parameters
 
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +59,7 @@ class Experiment:
 
     def _set_experiment_name(self) -> str:
         if self.ae:
-            return f"Autoencoder_latent={3*self.cfg.k:.0f}", []
+            return f"Autoencoder_latent={3*self.cfg.k:.0f}"
         if self.cfg.dual_mode:
             pre = "[DUAL]"
         else:
@@ -83,7 +83,7 @@ class Experiment:
         return (
             HyperviewDataset(
                 DATA_PATH,
-                TEST_IDS,
+                splits[0],
                 self.cfg.img_size,
                 self.cfg.max_val,
                 0,
@@ -103,7 +103,7 @@ class Experiment:
             ),
             HyperviewDataset(
                 TRAIN_PATH,
-                TRAIN_IDS,
+                splits[2],
                 self.cfg.img_size,
                 self.cfg.max_val,
                 0,
@@ -155,9 +155,10 @@ class Experiment:
     def _setup_bias_variance_model(self, div: np.ndarray) -> nn.Module:
         variance_renderer = RENDERERS_DICT[self.cfg.variance_renderer]
         self.num_params = variance_renderer.num_params
-        modeller = Modeller(
-            self.cfg.img_size, self.cfg.channels, self.cfg.k, self.num_params
-        ).to(self.cfg.device)
+        if "scale_only" in self.cfg.tags:
+            modeller = ModellerF(self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
+        else:
+            modeller = Modeller( self.cfg.channels, self.cfg.k, self.num_params).to(self.cfg.device)
         renderer = variance_renderer.model(
             self.cfg.device, self.cfg.channels, self.cfg.mu_type
         )
